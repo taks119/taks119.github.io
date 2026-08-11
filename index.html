@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>子供のタスク管理アプリ</title>
+<title>Sfamiアプリ</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
@@ -57,6 +57,20 @@
   }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   .row label { width: 70px; font-size: 13px; color: var(--sub); flex-shrink: 0; }
+
+  /* --- スマホでの縦の長さを抑えるための2列並び --- */
+  .row-pair { display: flex; gap: 10px; }
+  .row-pair .row { flex: 1; margin-bottom: 8px; }
+  .row-pair .row label { width: auto; margin-right: 2px; }
+
+  /* --- カード見出し＋右側の操作リンク --- */
+  .card-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .card-header-row h2 { margin: 0; }
+  .link-btn {
+    background: none; border: none; color: var(--accent); font-size: 12px;
+    font-weight: bold; cursor: pointer; padding: 4px 0; text-decoration: underline; white-space: nowrap;
+  }
+  .month-override { margin-bottom: 10px; }
 
   button.primary {
     width: 100%; padding: 12px; border: none; border-radius: 10px;
@@ -119,7 +133,7 @@
 </head>
 <body>
 
-<header><h1>🏠 子供のタスク管理アプリ</h1></header>
+<header><h1>🏠 Sfamiアプリ</h1></header>
 
 <!-- ===== サインイン画面 ===== -->
 <div id="signin-screen">
@@ -134,35 +148,40 @@
   <div class="tabs">
     <div class="tab active" data-page="allowance">💰 お小遣い</div>
     <div class="tab" data-page="task">✅ 毎日のタスク</div>
-    <div class="tab" data-page="stats">📊 実績</div>
+    <div class="tab" data-page="stats">📊 タスクの実績</div>
   </div>
 
   <!-- お小遣いページ -->
   <div class="page active" id="page-allowance">
     <div class="card">
-      <h2>対象月</h2>
-      <input type="month" id="allowance-month">
-    </div>
-
-    <div class="card">
-      <h2>新しく記録する</h2>
+      <h2>記録する</h2>
       <div class="row"><label>日付</label><input type="date" id="a-date"></div>
       <div class="row"><label>お手伝い</label><select id="a-content"></select></div>
-      <div class="row"><label>個数</label><input type="number" id="a-count" value="1" min="1"></div>
-      <div class="row"><label>金額</label><input type="number" id="a-amount"></div>
-      <div class="hint">↑「個数×単価」で自動計算されます（必要なら直接書き換え可）</div>
-      <div class="row"><label>登録者</label>
-        <select id="a-person"><option>ママ</option><option>パパ</option></select>
+      <div class="row-pair">
+        <div class="row"><label>個数</label><input type="number" id="a-count" value="1" min="1"></div>
+        <div class="row"><label>金額</label><input type="number" id="a-amount"></div>
       </div>
-      <div class="row"><label>支払い</label>
-        <select id="a-paid"><option value="true">支払い済み</option><option value="false">未払い</option></select>
+      <div class="hint">↑金額は「個数×単価」で自動計算されます（必要なら直接書き換え可）</div>
+      <div class="row-pair">
+        <div class="row"><label>登録者</label>
+          <select id="a-person"><option>ママ</option><option>パパ</option></select>
+        </div>
+        <div class="row"><label>支払い</label>
+          <select id="a-paid"><option value="true">支払い済み</option><option value="false">未払い</option></select>
+        </div>
       </div>
       <button class="primary" onclick="submitAllowance()">記録する</button>
       <div class="hint" id="allowance-status"></div>
     </div>
 
     <div class="card">
-      <h2>今月の実績</h2>
+      <div class="card-header-row">
+        <h2 id="allowance-list-label">実績</h2>
+        <button type="button" class="link-btn" id="allowance-month-toggle">他の月を見る</button>
+      </div>
+      <div class="month-override" id="allowance-month-picker" style="display:none;">
+        <input type="month" id="allowance-month">
+      </div>
       <div id="allowance-table" class="loading">読み込み中…</div>
       <div class="totals" id="allowance-totals"></div>
     </div>
@@ -184,8 +203,13 @@
     </div>
 
     <div class="card">
-      <h2>今月の一覧</h2>
-      <input type="month" id="task-month" style="margin-bottom:10px;">
+      <div class="card-header-row">
+        <h2 id="task-list-label">一覧</h2>
+        <button type="button" class="link-btn" id="task-month-toggle">他の月を見る</button>
+      </div>
+      <div class="month-override" id="task-month-picker" style="display:none;">
+        <input type="month" id="task-month">
+      </div>
       <div class="month-table" id="task-table"></div>
     </div>
   </div>
@@ -490,6 +514,30 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 function ymOf(dateStr) { return dateStr.slice(0, 7); }
 function mdDate(dateStr) { return dateStr.replace(/-/g, '/'); }
 function shortDate(dateStr) { const p = dateStr.split('-'); return p[1] + '/' + p[2]; }
+function ymLabel(ym) { const p = ym.split('-'); return p[0] + '年' + parseInt(p[1], 10) + '月'; }
+
+/* 「新しく記録する」の日付と「一覧」に表示する月は、原則連動させる。
+   「他の月を見る」を開いて別の月を選んだときだけ一時的に切り離す（*MonthOverride）。 */
+let allowanceMonthOverride = null;
+let taskMonthOverride = null;
+function currentAllowanceYm() { return allowanceMonthOverride || ymOf(document.getElementById('a-date').value); }
+function currentTaskYm() { return taskMonthOverride || ymOf(document.getElementById('t-date').value); }
+
+function setupMonthToggle(toggleId, pickerId, monthInputId, onClose) {
+  const toggle = document.getElementById(toggleId);
+  const picker = document.getElementById(pickerId);
+  toggle.addEventListener('click', function () {
+    const showing = picker.style.display !== 'none';
+    if (showing) {
+      picker.style.display = 'none';
+      toggle.textContent = '他の月を見る';
+      onClose();
+    } else {
+      picker.style.display = 'block';
+      toggle.textContent = '今日の月に戻る';
+    }
+  });
+}
 
 document.querySelectorAll('.tab').forEach(function (tab) {
   tab.addEventListener('click', function () {
@@ -510,9 +558,37 @@ async function initApp() {
   document.getElementById('stats-year').value = t.slice(0, 4);
   document.getElementById('stats-month-select').value = String(parseInt(t.slice(5, 7), 10));
 
-  document.getElementById('allowance-month').addEventListener('change', loadAllowanceMonth);
-  document.getElementById('task-month').addEventListener('change', loadTaskMonth);
-  document.getElementById('t-date').addEventListener('change', loadTaskDayIntoChecklist);
+  document.getElementById('a-date').addEventListener('change', function () {
+    allowanceMonthOverride = null;
+    document.getElementById('allowance-month').value = ymOf(this.value);
+    loadAllowanceMonth();
+  });
+  document.getElementById('allowance-month').addEventListener('change', function () {
+    allowanceMonthOverride = this.value;
+    loadAllowanceMonth();
+  });
+  setupMonthToggle('allowance-month-toggle', 'allowance-month-picker', 'allowance-month', function () {
+    allowanceMonthOverride = null;
+    document.getElementById('allowance-month').value = ymOf(document.getElementById('a-date').value);
+    loadAllowanceMonth();
+  });
+
+  document.getElementById('t-date').addEventListener('change', function () {
+    taskMonthOverride = null;
+    document.getElementById('task-month').value = ymOf(this.value);
+    loadTaskDayIntoChecklist();
+    loadTaskMonth();
+  });
+  document.getElementById('task-month').addEventListener('change', function () {
+    taskMonthOverride = this.value;
+    loadTaskMonth();
+  });
+  setupMonthToggle('task-month-toggle', 'task-month-picker', 'task-month', function () {
+    taskMonthOverride = null;
+    document.getElementById('task-month').value = ymOf(document.getElementById('t-date').value);
+    loadTaskMonth();
+  });
+
   document.getElementById('stats-year').addEventListener('change', function () { loadStats(parseInt(this.value, 10)); });
   document.getElementById('stats-month-select').addEventListener('change', function () {
     if (window.__statsData) renderCalendarForMonth(window.__statsData, parseInt(this.value, 10));
@@ -547,8 +623,9 @@ function renderAllowanceMaster(list) {
 }
 
 async function loadAllowanceMonth() {
-  const ym = document.getElementById('allowance-month').value;
+  const ym = currentAllowanceYm();
   if (!ym) return;
+  document.getElementById('allowance-list-label').textContent = ymLabel(ym) + 'の実績';
   document.getElementById('allowance-table').innerHTML = '<div class="loading">読み込み中…</div>';
   renderAllowanceMonth(await getAllowanceMonth(ym));
 }
@@ -581,7 +658,11 @@ async function submitAllowance() {
   try {
     const data = await addAllowanceEntry(ym, entry);
     statusEl.textContent = '✅ 保存しました（' + entry.date + ' ' + entry.content + '）';
+    allowanceMonthOverride = null;
     document.getElementById('allowance-month').value = ym;
+    document.getElementById('allowance-month-picker').style.display = 'none';
+    document.getElementById('allowance-month-toggle').textContent = '他の月を見る';
+    document.getElementById('allowance-list-label').textContent = ymLabel(ym) + 'の実績';
     renderAllowanceMonth(data);
   } catch (err) {
     statusEl.textContent = '⚠️ 保存に失敗しました：' + err.message;
@@ -642,7 +723,10 @@ async function submitTaskDay() {
   try {
     await setTaskDay(ym, short, checks);
     statusEl.textContent = '✅ ' + short + ' の記録を保存しました';
+    taskMonthOverride = null;
     document.getElementById('task-month').value = ym;
+    document.getElementById('task-month-picker').style.display = 'none';
+    document.getElementById('task-month-toggle').textContent = '他の月を見る';
     await loadTaskMonth();
   } catch (err) {
     statusEl.textContent = '⚠️ 保存に失敗しました：' + err.message;
@@ -650,8 +734,9 @@ async function submitTaskDay() {
 }
 
 async function loadTaskMonth() {
-  const ym = document.getElementById('task-month').value;
+  const ym = currentTaskYm();
   if (!ym) return;
+  document.getElementById('task-list-label').textContent = ymLabel(ym) + 'の一覧';
   document.getElementById('task-table').innerHTML = '<div class="loading">読み込み中…</div>';
   renderTaskMonth(await getTaskMonth(ym));
 }
