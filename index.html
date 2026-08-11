@@ -96,9 +96,9 @@
   .tab {
     flex: 1; min-height: var(--nav-h); border: none; background: none; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-    color: var(--sub); font-size: 11px; font-weight: 800; padding: 6px 2px;
+    color: var(--sub); font-size: 10.5px; font-weight: 800; padding: 6px 1px; white-space: nowrap;
   }
-  .tab .ico { font-size: 21px; line-height: 1; filter: grayscale(1); opacity: .55; }
+  .tab .ico { font-size: 20px; line-height: 1; filter: grayscale(1); opacity: .55; }
   .tab.active { color: var(--blue); }
   .tab.active .ico { filter: none; opacity: 1; }
 
@@ -123,7 +123,7 @@
   .field { margin-bottom: 16px; }
   .field:last-of-type { margin-bottom: 0; }
   .lbl { display: block; font-size: 12px; font-weight: 800; color: var(--sub); letter-spacing: .05em; margin-bottom: 7px; }
-  input[type=date], input[type=number], input[type=month], select {
+  input[type=date], input[type=number], input[type=month], input[type=text], select {
     width: 100%; font-family: inherit; font-size: 16px; color: var(--text);
     min-height: 48px; padding: 11px 12px;
     border: 1px solid var(--line); border-radius: 10px; background: #fff;
@@ -283,6 +283,7 @@
   .cal-cell {
     background: #fff; border: 1px solid var(--line); border-radius: 10px; aspect-ratio: 1/1;
     display: flex; align-items: center; justify-content: center; position: relative;
+    padding: 0; font-family: inherit; width: 100%;
   }
   .cal-cell.empty { background: none; border: none; }
   .cal-date { position: absolute; top: 3px; left: 5px; font-size: 10px; font-weight: 700; color: var(--sub); }
@@ -290,6 +291,73 @@
   .mark-triangle { color: var(--amber); font-size: 21px; font-weight: 800; }
   .mark-cross { color: #c3ced8; font-size: 19px; font-weight: 800; }
   .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--sub); font-weight: 700; }
+
+  /* 日付見出し（やることタブ）：ボタンを日付のすぐ隣に置く。右端に飛ばすと何のボタンか伝わらない */
+  .date-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .date-head h2 { margin: 0; font-size: 16px; font-weight: 800; }
+  .date-head .cal-ico { font-size: 16px; }
+  .date-head .link-btn { margin-left: 2px; }
+
+  /* カレンダーの日をタップ → その日の内訳 */
+  .cal-cell.tappable { cursor: pointer; }
+  .cal-cell.tappable:active { background: var(--blue-soft); }
+  .cal-cell.picked { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-soft); }
+  .hint-tap { margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--sub); text-align: center; }
+  .daydetail { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .dd-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .dd-head .t { font-size: 15px; font-weight: 800; }
+  .dd-sec { margin: 12px 0 6px; font-size: 12px; font-weight: 800; color: var(--sub); }
+  .dd-item { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line-2); font-size: 14px; }
+  .dd-item:last-child { border-bottom: none; }
+  .dd-item .st { flex-shrink: 0; width: 22px; text-align: center; font-weight: 800; }
+  .dd-item.ok .st { color: var(--green); }
+  .dd-item.ng { color: var(--red-dark); }
+  .dd-item.ng .st { color: var(--red); }
+  .dd-item.warn { color: var(--red-dark); }
+  .dd-item.warn .st { color: var(--red); }
+
+  /* ---------- 管理タブ ---------- */
+  .adm { display: flex; align-items: center; gap: 10px; padding: 12px 2px; border-bottom: 1px solid var(--line-2); }
+  .adm:last-child { border-bottom: none; }
+  .adm .tx { flex: 1; min-width: 0; }
+  .adm .nm { display: block; font-size: 15px; font-weight: 800; line-height: 1.3; }
+  .adm .sub { display: block; margin-top: 3px; font-size: 11px; font-weight: 700; color: var(--sub); }
+  .adm .pr { font-size: 15px; font-weight: 800; color: var(--teal); white-space: nowrap; }
+  .adm .pr.minus { color: var(--red); }
+  .adm .acts { display: flex; gap: 4px; flex-shrink: 0; }
+  .icon-btn {
+    min-width: 40px; min-height: 40px; border: 1px solid var(--line); border-radius: 9px;
+    background: #fff; font-size: 15px; cursor: pointer; color: var(--sub);
+  }
+  .icon-btn:active { background: var(--line-2); }
+  .icon-btn.del { color: var(--red); border-color: #f2d6d0; }
+  .tagpill { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: var(--line-2); color: var(--sub); margin-left: 6px; }
+  .tagpill.parent { background: var(--red-soft); color: var(--red-dark); }
+  .btn-outline {
+    width: 100%; min-height: 48px; border: 1.5px solid var(--line); border-radius: 12px;
+    background: #fff; color: var(--text); font-size: 15px; font-weight: 800; cursor: pointer;
+  }
+  .btn-outline:active { background: var(--line-2); }
+
+  /* ---------- 編集ダイアログ ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(16,36,52,.45); padding: 0;
+  }
+  .modal-card {
+    width: 100%; max-width: var(--wrap); background: #fff;
+    border-radius: 18px 18px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+    max-height: 88vh; overflow-y: auto;
+  }
+  .modal-card h3 { margin: 0 0 16px; font-size: 16px; font-weight: 800; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-actions button { flex: 1; }
+  .modal-err { color: var(--red); font-size: 13px; font-weight: 700; margin-top: 10px; min-height: 18px; }
+  .readonly-val { font-size: 15px; font-weight: 800; color: var(--sub); min-height: 48px; display: flex; align-items: center; }
+  @media (min-width: 560px) {
+    .modal { align-items: center; padding: 20px; }
+    .modal-card { border-radius: 18px; }
+  }
 
   .loading { text-align: center; color: var(--sub); padding: 22px 0; font-size: 13px; font-weight: 700; }
   .empty { text-align: center; color: var(--sub); padding: 22px 0; font-size: 13px; font-weight: 700; }
@@ -339,7 +407,8 @@
           <span class="lbl">日付</span>
           <div class="val-row">
             <span class="v" id="a-date-text"></span>
-            <button type="button" class="link-btn" id="a-date-toggle">変更</button>
+            <button type="button" class="link-btn" id="a-date-toggle"
+                    data-closed="日付をかえる" data-open="とじる">日付をかえる</button>
           </div>
           <input type="date" id="a-date" hidden>
         </div>
@@ -363,7 +432,8 @@
             <span class="lbl">金額（自動計算）</span>
             <div class="amount-box">
               <span class="v" id="a-amount-view">0円</span>
-              <button type="button" class="link-btn" id="a-amount-toggle">変更</button>
+              <button type="button" class="link-btn" id="a-amount-toggle"
+                      data-closed="手で直す" data-open="とじる">手で直す</button>
             </div>
             <input type="number" id="a-amount" hidden>
           </div>
@@ -432,9 +502,11 @@
     <div class="page" id="page-task">
 
       <div class="card">
-        <div class="card-head">
+        <div class="date-head">
+          <span class="cal-ico">📅</span>
           <h2 id="t-date-text"></h2>
-          <button type="button" class="link-btn" id="t-date-toggle">変更</button>
+          <button type="button" class="link-btn" id="t-date-toggle"
+                  data-closed="日付をかえる" data-open="とじる">日付をかえる</button>
         </div>
         <input type="date" id="t-date" style="margin-bottom:14px;" hidden>
 
@@ -479,6 +551,8 @@
           <span><span class="mark-triangle" style="font-size:15px;">△</span> できたけど要注意</span>
           <span><span class="mark-cross" style="font-size:15px;">×</span> のこりがあった</span>
         </div>
+        <div class="hint-tap" id="stats-tap-hint">〇△× の日をタップすると、その日の内訳が見られます</div>
+        <div class="daydetail" id="stats-day-detail" hidden></div>
       </div>
 
       <div class="card">
@@ -487,7 +561,56 @@
       </div>
     </div>
 
+    <!-- ============ 管理（親のみ） ============ -->
+    <div class="page" id="page-admin">
+      <div class="card">
+        <div class="card-head">
+          <h2>💰 お小遣いマスタ</h2>
+          <button type="button" class="link-btn" onclick="openAllowanceEditor(-1)">＋ 追加</button>
+        </div>
+        <div id="admin-allowance"></div>
+        <div class="note" style="margin-top:12px;">
+          ここを変えると、記録画面のおてつだいチップと、りょうやくんの「できること と きんがく」に反映されます。
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>✅ やることマスタ</h2>
+          <button type="button" class="link-btn" onclick="openTaskEditor(-1)">＋ 追加</button>
+        </div>
+        <div id="admin-task"></div>
+        <div class="note" style="margin-top:12px;">
+          「記録列」は実績ファイルのどの列に書くかの目印です。追加すると自動で決まり、あとから変えられません
+          （変えると過去の実績とつながらなくなるため）。<br>
+          削除しても過去の実績は消えません。集計の対象から外れるだけです。
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🔄 読み直し</h2>
+        <div class="note" style="margin-bottom:12px;">
+          Obsidianなどでマスタを直接編集した場合は、ここから読み直してください。
+        </div>
+        <button class="btn-outline" onclick="reloadMastersFromDrive()">マスタを読み直す</button>
+        <div class="status" id="admin-status"></div>
+      </div>
+    </div>
+
   </main>
+
+  <!-- 編集用ダイアログ -->
+  <div class="modal" id="edit-modal" hidden>
+    <div class="modal-card">
+      <h3 id="edit-title"></h3>
+      <div id="edit-fields"></div>
+      <div class="modal-err" id="edit-err"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-outline" onclick="closeEditor()">キャンセル</button>
+        <button type="button" class="btn-primary" id="edit-save">保存する</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 保存バー（やることタブのときだけ表示） -->
   <div class="savebar">
@@ -503,6 +626,7 @@
       <button type="button" class="tab active" data-page="allowance"><span class="ico">💰</span>おこづかい</button>
       <button type="button" class="tab" data-page="task"><span class="ico">✅</span>やること</button>
       <button type="button" class="tab" data-page="stats"><span class="ico">⭐</span>がんばり表</button>
+      <button type="button" class="tab" data-page="admin" id="tab-admin"><span class="ico">⚙️</span>管理</button>
     </div>
   </nav>
 </div>
@@ -522,8 +646,8 @@ const FILE = {
   allowanceMaster: '1BoWRxavtiMuKzJ-M2W4eVmOBBEAsBB5R', // 02_お小遣い管理/マスタ.md
   taskMaster: '17rTy77jWGfpa7ysOMqa3fo2RM53khfSY'         // 03_子供のタスク管理/マスタ.md
 };
-/* 実績mdの列名。マスタの「やる事」名（例：連絡帳を出す）とは別物なので、
-   buildTaskKeyMap() で対応付けてから使う。 */
+/* 実績mdの旧列名。どの列に記録するかはマスタの「記録列」が正本で、これはその列が
+   未記入だった場合の後方互換用（guessTaskKeys）。通常は使われない。 */
 const TASK_ITEMS = ['連絡帳', 'ランチョン', 'えんぴつ', '水筒', '宿題', 'くもん', '英語', '本読み', '引出し', 'お風呂', '時間', '言う事'];
 const SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
 
@@ -531,8 +655,6 @@ let accessToken = null;
 let tokenClient = null;
 let allowanceMaster = [];
 let taskMaster = [];
-let taskKeyMap = {};        // マスタの「やる事」名 → 実績mdの列名
-let taskKeyToMaster = {};   // 実績mdの列名 → マスタ行
 
 /* ---------- 家族アカウント／役割 ---------- */
 const ROLE_CHILD = '子供';
@@ -569,6 +691,7 @@ function applyRolePermissions() {
   document.getElementById('child-hero').hidden = !isChild;
   document.getElementById('child-motiv').hidden = !isChild;
   document.getElementById('child-prices').hidden = !isChild;
+  document.getElementById('tab-admin').hidden = isChild;  // 管理タブは親だけ
   if (isChild) {
     document.getElementById('child-motiv-msg').textContent = pickMotivation();
     activateTab('task'); // 子供は「やること」から始める
@@ -758,48 +881,88 @@ async function addAllowanceEntry(ym, entry) {
 }
 
 /* ---------- 子供のタスク ---------- */
+/* 実績mdの列は、マスタの「記録列」から作る（マスタを並べ替えてもズレないようにするため） */
+function taskColumns() {
+  return taskMaster.map(function (m) { return m.key; });
+}
 function taskTemplate(ym) {
-  const header = '| 日付 | ' + TASK_ITEMS.join(' | ') + ' |\n|---|' + TASK_ITEMS.map(function () { return '---'; }).join('|') + '|\n';
+  const cols = taskColumns();
+  const header = '| 日付 | ' + cols.join(' | ') + ' |\n|---|' + cols.map(function () { return '---'; }).join('|') + '|\n';
   return '---\ndate: ' + ym + '\ntags: [子供のタスク管理, 実績]\n---\n\n# 子供のタスク実績 ' + ym + '\n\n' +
     '凡例：✅=できた／❌=できなかった。「時間」「言う事」は✅＝守れなかった（要注意）を表す。\n\n' + header;
 }
 async function getTaskMaster() {
   const table = parseMarkdownTable(await readFile(FILE.taskMaster));
-  return table.rows.map(function (r) { return { name: r[0], category: r[1], time: r[2], checker: r[3] }; });
+  const rows = table.rows.map(function (r) {
+    return { name: r[0], category: r[1], time: r[2], checker: r[3], key: r[4] || '' };
+  });
+  // 「記録列」列が無い古いマスタでも動くように、空なら推測で埋める
+  if (rows.some(function (r) { return !r.key; })) {
+    const guessed = guessTaskKeys(rows);
+    rows.forEach(function (r, i) { if (!r.key) r.key = guessed[i]; });
+  }
+  return rows;
 }
 
-/* マスタの「やる事」名（連絡帳を出す）と実績mdの列名（連絡帳）は表記が違う。
-   まず部分一致で探し、見つからないものだけ行順で対応させる
-   （例：「白い引き出し片づける」⇔「引出し」は部分一致しないため行順で拾う）。 */
-function buildTaskKeyMap(master) {
-  const map = {}, rev = {}, used = {};
-  master.forEach(function (item, idx) {
+/* 「記録列」が未記入のときの後方互換：マスタ名（連絡帳を出す）から実績mdの旧列名（連絡帳）を推測する。
+   部分一致を優先し、一致しないものだけ行順で拾う（例：「白い引き出し片づける」⇔「引出し」）。 */
+function guessTaskKeys(rows) {
+  const used = {};
+  return rows.map(function (item, idx) {
     let key = TASK_ITEMS.find(function (k) { return !used[k] && String(item.name).indexOf(k) !== -1; });
     if (!key && TASK_ITEMS[idx] && !used[TASK_ITEMS[idx]]) key = TASK_ITEMS[idx];
-    if (!key) key = TASK_ITEMS.find(function (k) { return !used[k]; });
-    if (key) { map[item.name] = key; rev[key] = item; used[key] = true; }
+    if (!key) key = item.name;
+    used[key] = true;
+    return key;
   });
-  return { map: map, rev: rev };
+}
+
+/* 実績mdは自分のヘッダ行が列の正本。月ごとに列構成が違っても正しく読めるようにする。 */
+/* セルの「-」は対象外（その日にはまだ無かった項目）。✅/❌ とは区別して扱う。 */
+const NA_MARK = '-';
+function parseTaskFile(content) {
+  const table = parseMarkdownTable(content);
+  const columns = table.headers.slice(1);
+  const days = table.rows.map(function (r) {
+    const day = { date: r[0], _na: {} };
+    columns.forEach(function (c, i) {
+      const v = r[i + 1];
+      day[c] = v === '✅';
+      if (v === NA_MARK || v === undefined || v === '') day._na[c] = true;
+    });
+    return day;
+  });
+  return { table: table, columns: columns, days: days };
 }
 
 async function getTaskMonth(ym) {
   const fileId = await findOrCreateMonthFile(FOLDER.taskRecords, '子供タスク', ym, taskTemplate);
-  const table = parseMarkdownTable(await readFile(fileId));
-  const days = table.rows.map(function (r) {
-    const day = { date: r[0] };
-    TASK_ITEMS.forEach(function (name, i) { day[name] = r[i + 1] === '✅'; });
-    return day;
-  });
-  return { fileId: fileId, items: TASK_ITEMS, days: days };
+  const parsed = parseTaskFile(await readFile(fileId));
+  return { fileId: fileId, columns: parsed.columns, days: parsed.days };
 }
+
 async function setTaskDay(ym, dateStr, checks) {
   const fileId = await findOrCreateMonthFile(FOLDER.taskRecords, '子供タスク', ym, taskTemplate);
-  const content = await readFile(fileId);
-  const table = parseMarkdownTable(content);
-  const newRowCells = [dateStr].concat(TASK_ITEMS.map(function (name) { return checks[name] ? '✅' : '❌'; }));
-  const newRow = '| ' + newRowCells.join(' | ') + ' |';
+  const parsed = parseTaskFile(await readFile(fileId));
+  const table = parsed.table;
   const lines = table.lines.slice();
+  let cols = parsed.columns.slice();
 
+  // マスタに項目が増えていたら、実績mdにも列を足す。
+  // 既存の日は「-」＝対象外で埋める（❌にすると、その項目が無かった過去の日まで×に変わってしまうため）
+  const missing = taskColumns().filter(function (c) { return c && cols.indexOf(c) === -1; });
+  if (missing.length) {
+    cols = cols.concat(missing);
+    lines[table.startLine] = '| ' + [table.headers[0]].concat(cols).join(' | ') + ' |';
+    lines[table.startLine + 1] = '|---|' + cols.map(function () { return '---'; }).join('|') + '|';
+    for (let i = 0; i < table.rows.length; i++) {
+      const cells = table.rows[i].slice();
+      while (cells.length < cols.length + 1) cells.push(NA_MARK);
+      lines[table.startLine + 2 + i] = '| ' + cells.join(' | ') + ' |';
+    }
+  }
+
+  const newRow = '| ' + [dateStr].concat(cols.map(function (c) { return checks[c] ? '✅' : '❌'; })).join(' | ') + ' |';
   let existingIndex = -1;
   for (let i = 0; i < table.rows.length; i++) { if (table.rows[i][0] === dateStr) { existingIndex = i; break; } }
   if (existingIndex !== -1) lines[table.startLine + 2 + existingIndex] = newRow;
@@ -812,13 +975,22 @@ async function setTaskDay(ym, dateStr, checks) {
 /* 実績集計用：ファイルが無ければ作成せず空扱いにする（年間集計で空ファイルを量産しないため） */
 async function getTaskMonthReadOnly(ym) {
   const file = await findFileByName(FOLDER.taskRecords, '子供タスク_' + ym + '.md');
-  if (!file) return [];
-  const table = parseMarkdownTable(await readFile(file.id));
-  return table.rows.map(function (r) {
-    const day = { date: r[0] };
-    TASK_ITEMS.forEach(function (name, i) { day[name] = r[i + 1] === '✅'; });
-    return day;
-  });
+  if (!file) return { columns: [], days: [] };
+  const parsed = parseTaskFile(await readFile(file.id));
+  return { columns: parsed.columns, days: parsed.days };
+}
+
+/* マスタmdのテーブル行だけを差し替える（frontmatterや説明文はそのまま残す） */
+function replaceTableRows(content, rows) {
+  const t = parseMarkdownTable(content);
+  if (t.startLine === -1) throw new Error('マスタのテーブルが見つかりませんでした');
+  const lines = t.lines.slice();
+  const newLines = rows.map(function (cells) { return '| ' + cells.join(' | ') + ' |'; });
+  lines.splice(t.startLine + 2, t.endLine - (t.startLine + 2), ...newLines);
+  return lines.join('\n');
+}
+async function saveMasterRows(fileId, rows) {
+  await writeFile(fileId, replaceTableRows(await readFile(fileId), rows));
 }
 
 /* ---------- 実績カレンダー／スコアリング ---------- */
@@ -831,39 +1003,51 @@ function countWeekdays(year, month) {
   }
   return count;
 }
-/* 引数は実績mdの列名。対応するマスタ行の「確認する人」で判定する。 */
-function isParentItem(key) {
-  const m = taskKeyToMaster[key];
-  return !!m && m.checker === '親';
-}
 function dayNumFromShort(dateStr) { return parseInt(String(dateStr).split('/')[1], 10); }
-function computeDayScore(day, childItems, parentItems) {
-  if (!childItems.length) return null;
-  const allChildDone = childItems.every(function (name) { return day[name] === true; });
+function computeDayScore(day, childCols, parentCols) {
+  const na = day._na || {};
+  const notApplicable = function (c) { return na[c]; };
+  const child = childCols.filter(function (c) { return !notApplicable(c); });
+  if (!child.length) return null;
+  const allChildDone = child.every(function (c) { return day[c] === true; });
   if (!allChildDone) return { type: 'cross', score: 0 };
-  const parentBad = parentItems.some(function (name) { return day[name] === true; });
+  const parentBad = parentCols.filter(function (c) { return !notApplicable(c); })
+    .some(function (c) { return day[c] === true; });
   if (parentBad) return { type: 'triangle', score: 0.5 };
   return { type: 'circle', score: 1.0 };
 }
+/* 採点の対象は「マスタにある項目」かつ「その月の実績mdに列がある項目」だけ。
+   あとから項目を増やしても、列が無い過去の月が×に変わってしまわないようにするため。 */
+function scoringColsFor(fileColumns) {
+  const has = function (m) { return fileColumns.indexOf(m.key) !== -1; };
+  return {
+    child: taskMaster.filter(function (m) { return m.checker !== '親' && has(m); }).map(function (m) { return m.key; }),
+    parent: taskMaster.filter(function (m) { return m.checker === '親' && has(m); }).map(function (m) { return m.key; })
+  };
+}
 async function getYearlyTaskStats(year) {
-  const childItems = TASK_ITEMS.filter(function (name) { return !isParentItem(name); });
-  const parentItems = TASK_ITEMS.filter(isParentItem);
   const yms = [];
   for (let m = 1; m <= 12; m++) yms.push(String(year) + '-' + String(m).padStart(2, '0'));
-  const monthRows = await Promise.all(yms.map(getTaskMonthReadOnly));
-  const months = monthRows.map(function (rows, idx) {
+  const monthData = await Promise.all(yms.map(getTaskMonthReadOnly));
+  const months = monthData.map(function (md, idx) {
     const m = idx + 1;
     const target = countWeekdays(year, m);
+    const cols = scoringColsFor(md.columns);
     let result = 0;
-    const calendar = {};
-    rows.forEach(function (day) {
-      const score = computeDayScore(day, childItems, parentItems);
+    const calendar = {}, dayRows = {};
+    md.days.forEach(function (day) {
+      const score = computeDayScore(day, cols.child, cols.parent);
       if (score) {
         result += score.score;
         calendar[dayNumFromShort(day.date)] = score;
+        dayRows[dayNumFromShort(day.date)] = day;
       }
     });
-    return { month: m, target: target, result: result, rate: target > 0 ? Math.round(result / target * 100) : 0, calendar: calendar };
+    return {
+      month: m, target: target, result: result,
+      rate: target > 0 ? Math.round(result / target * 100) : 0,
+      calendar: calendar, dayRows: dayRows, columns: md.columns
+    };
   });
   return { year: year, months: months };
 }
@@ -894,7 +1078,7 @@ function isMinus(amountStr) { return /^[-−]/.test(String(amountStr).trim()); }
 /* 日付欄：ふだんは「8月11日(火) きょう」と表示し、「変更」を押したときだけ入力欄を開く */
 const DATE_FIELDS = [
   { input: 'a-date', text: 'a-date-text', toggle: 'a-date-toggle', prefix: '' },
-  { input: 't-date', text: 't-date-text', toggle: 't-date-toggle', prefix: '📅 ' }
+  { input: 't-date', text: 't-date-text', toggle: 't-date-toggle', prefix: '' }
 ];
 function refreshDateText(f) {
   const input = document.getElementById(f.input);
@@ -902,10 +1086,12 @@ function refreshDateText(f) {
   document.getElementById(f.text).innerHTML = (f.prefix || '') + esc(jDateLabel(input.value)) +
     (isToday ? '<span class="today-tag">きょう</span>' : '');
 }
-/* 開いている入力欄を閉じた状態に戻す（ログインし直したときの初期化用） */
+/* 開閉ボタンの文言はボタン自身のdata-open / data-closedに持たせる
+   （「変更」だけだと何の変更か分からないため、欄ごとに言葉を変えられるようにした） */
+function toggleLabel(btn, isOpen) { btn.textContent = isOpen ? btn.dataset.open : btn.dataset.closed; }
 function collapseToggle(inputId, toggleId) {
   document.getElementById(inputId).hidden = true;
-  document.getElementById(toggleId).textContent = '変更';
+  toggleLabel(document.getElementById(toggleId), false);
 }
 
 /* セグメント切替（登録者・支払い） */
@@ -957,7 +1143,8 @@ function bindEventsOnce() {
       const input = document.getElementById(f.input);
       const isOpen = !input.hidden;
       input.hidden = isOpen;
-      this.textContent = isOpen ? '変更' : '閉じる';
+      toggleLabel(this, !isOpen);
+      if (!isOpen) input.focus();
     });
     document.getElementById(f.input).addEventListener('change', function () { refreshDateText(f); });
   });
@@ -1004,11 +1191,31 @@ function bindEventsOnce() {
     const input = document.getElementById('a-amount');
     const isOpen = !input.hidden;
     input.hidden = isOpen;
-    this.textContent = isOpen ? '変更' : '閉じる';
+    toggleLabel(this, !isOpen);
     if (!isOpen) input.focus();
   });
   document.getElementById('a-count-minus').addEventListener('click', function () { stepCount(-1); });
   document.getElementById('a-count-plus').addEventListener('click', function () { stepCount(1); });
+
+  document.getElementById('edit-save').addEventListener('click', async function () {
+    if (!editorSave) return;
+    const btn = this;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = '保存中…';
+    try {
+      const result = await editorSave();
+      if (result !== false) closeEditor();   // 入力エラーのときはeditorErrorがfalseを返す
+    } catch (err) {
+      editorError('保存に失敗しました：' + err.message);
+    }
+    btn.disabled = false;
+    btn.textContent = label;
+  });
+  // 背景をタップしたら閉じる
+  document.getElementById('edit-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeEditor();
+  });
 }
 
 async function initApp() {
@@ -1037,20 +1244,28 @@ async function initApp() {
   document.getElementById('a-paid').value = 'true';
   setupPersonField();
 
-  allowanceMaster = await getAllowanceMaster();
-  const sel = document.getElementById('a-content');
-  sel.innerHTML = allowanceMaster.map(function (m) { return '<option>' + esc(m.name) + '</option>'; }).join('');
-  renderContentChips();
-  renderAllowanceMaster(allowanceMaster);
-  updateAllowanceAmount();
-
-  taskMaster = await getTaskMaster();
-  const km = buildTaskKeyMap(taskMaster);
-  taskKeyMap = km.map;
-  taskKeyToMaster = km.rev;
+  await reloadAllowanceMaster();
+  await reloadTaskMaster();
 
   await loadTaskDayIntoChecklist();
   await loadAllowanceMonth();
+}
+
+/* マスタを読み直して、それに依存する画面を作り直す（管理タブでの編集後にも呼ぶ） */
+async function reloadAllowanceMaster() {
+  allowanceMaster = await getAllowanceMaster();
+  const sel = document.getElementById('a-content');
+  const prev = sel.value;
+  sel.innerHTML = allowanceMaster.map(function (m) { return '<option>' + esc(m.name) + '</option>'; }).join('');
+  if (allowanceMaster.some(function (m) { return m.name === prev; })) sel.value = prev;
+  renderContentChips();
+  renderAllowanceMaster(allowanceMaster);
+  updateAllowanceAmount();
+  renderAdminAllowance();
+}
+async function reloadTaskMaster() {
+  taskMaster = await getTaskMaster();
+  renderAdminTask();
 }
 
 /* ---------- お小遣い：フォーム ---------- */
@@ -1191,14 +1406,13 @@ const CAT_ICON = { '次の日のじゅんび': '🎒', '勉強': '✏️', '生�
 let currentTaskDayData = {};
 
 function taskRowHTML(item, dayData) {
-  const key = taskKeyMap[item.name];
-  const checked = !!dayData[key];
+  const checked = !!dayData[item.key];
   const isParent = item.checker === '親';
   const cls = 'task-row' + (checked ? ' on' : '') + (isParent ? ' warn' : '');
   const meta = (!isParent && item.time && item.time !== '-')
     ? '<span class="meta">🕒 ' + esc(item.time) + ' までに</span>' : '';
   const icon = checked ? (isParent ? '⚠' : '✓') : '';
-  return '<button type="button" class="' + cls + '" data-item="' + esc(item.name) + '"' +
+  return '<button type="button" class="' + cls + '" data-key="' + esc(item.key) + '"' +
     ' data-warn="' + (isParent ? '1' : '0') + '" onclick="toggleCheck(this)">' +
     '<span class="box">' + icon + '</span>' +
     '<span class="tx"><span class="nm">' + esc(item.name) + '</span>' + meta + '</span>' +
@@ -1277,10 +1491,11 @@ async function submitTaskDay() {
 
   // 画面に出ていない項目（子供ログイン時の親チェック欄など）は、保存済みの値を引き継ぐ
   const checks = {};
-  TASK_ITEMS.forEach(function (k) { checks[k] = !!currentTaskDayData[k]; });
+  Object.keys(currentTaskDayData).forEach(function (k) {
+    if (k !== 'date') checks[k] = !!currentTaskDayData[k];
+  });
   document.querySelectorAll('#task-checklist .task-row, #task-parent-list .task-row').forEach(function (btn) {
-    const key = taskKeyMap[btn.dataset.item];
-    if (key) checks[key] = btn.classList.contains('on');
+    checks[btn.dataset.key] = btn.classList.contains('on');
   });
 
   const statusEl = document.getElementById('task-status');
@@ -1296,6 +1511,166 @@ async function submitTaskDay() {
     statusEl.className = 'status ng';
     statusEl.textContent = '⚠️ 保存に失敗しました：' + err.message;
   }
+}
+
+/* ---------- 管理タブ（親のみ） ---------- */
+function renderAdminAllowance() {
+  const el = document.getElementById('admin-allowance');
+  if (!el) return;
+  if (!allowanceMaster.length) { el.innerHTML = '<div class="empty">項目がありません</div>'; return; }
+  el.innerHTML = allowanceMaster.map(function (m, i) {
+    return '<div class="adm">' +
+      '<span class="tx"><span class="nm">' + esc(m.name) + '</span></span>' +
+      '<span class="pr' + (isMinus(m.amount) ? ' minus' : '') + '">' + esc(m.amount) + '</span>' +
+      '<span class="acts">' +
+        '<button type="button" class="icon-btn" title="編集" onclick="openAllowanceEditor(' + i + ')">✏️</button>' +
+        '<button type="button" class="icon-btn del" title="削除" onclick="deleteAllowanceRow(' + i + ')">🗑</button>' +
+      '</span></div>';
+  }).join('');
+}
+function renderAdminTask() {
+  const el = document.getElementById('admin-task');
+  if (!el) return;
+  if (!taskMaster.length) { el.innerHTML = '<div class="empty">項目がありません</div>'; return; }
+  el.innerHTML = taskMaster.map(function (m, i) {
+    const isParent = m.checker === '親';
+    const time = (m.time && m.time !== '-') ? ' ・🕒 ' + esc(m.time) : '';
+    return '<div class="adm">' +
+      '<span class="tx"><span class="nm">' + esc(m.name) +
+        (isParent ? '<span class="tagpill parent">親チェック</span>' : '') + '</span>' +
+        '<span class="sub">' + esc(m.category || '－') + time +
+        '<span class="tagpill">記録列 ' + esc(m.key) + '</span></span></span>' +
+      '<span class="acts">' +
+        '<button type="button" class="icon-btn" title="編集" onclick="openTaskEditor(' + i + ')">✏️</button>' +
+        '<button type="button" class="icon-btn del" title="削除" onclick="deleteTaskRow(' + i + ')">🗑</button>' +
+      '</span></div>';
+  }).join('');
+}
+
+async function reloadMastersFromDrive() {
+  const st = document.getElementById('admin-status');
+  st.className = 'status'; st.textContent = '読み直しています…';
+  try {
+    await reloadAllowanceMaster();
+    await reloadTaskMaster();
+    await loadTaskDayIntoChecklist();
+    statsLoadedYear = null;
+    st.textContent = '✅ 読み直しました';
+  } catch (err) {
+    st.className = 'status ng'; st.textContent = '⚠️ 失敗しました：' + err.message;
+  }
+}
+
+/* --- 編集ダイアログ --- */
+let editorSave = null;
+function openEditor(title, fieldsHTML, onSave) {
+  document.getElementById('edit-title').textContent = title;
+  document.getElementById('edit-fields').innerHTML = fieldsHTML;
+  document.getElementById('edit-err').textContent = '';
+  document.getElementById('edit-modal').hidden = false;
+  editorSave = onSave;
+  const first = document.querySelector('#edit-fields input:not([readonly]), #edit-fields select');
+  if (first) first.focus();
+}
+function closeEditor() {
+  document.getElementById('edit-modal').hidden = true;
+  editorSave = null;
+}
+function editorError(msg) {
+  document.getElementById('edit-err').textContent = '⚠️ ' + msg;
+  return false; // 呼び出し側は return editorError(...) で「保存せず閉じない」を表す
+}
+function ev(id) { return (document.getElementById(id).value || '').trim(); }
+
+function textField(label, id, value, placeholder) {
+  return '<div class="field"><span class="lbl">' + esc(label) + '</span>' +
+    '<input type="text" id="' + id + '" value="' + esc(value || '') + '"' +
+    (placeholder ? ' placeholder="' + esc(placeholder) + '"' : '') + '></div>';
+}
+function selectField(label, id, value, options) {
+  return '<div class="field"><span class="lbl">' + esc(label) + '</span><select id="' + id + '">' +
+    options.map(function (o) {
+      return '<option' + (o === value ? ' selected' : '') + '>' + esc(o) + '</option>';
+    }).join('') + '</select></div>';
+}
+
+/* --- お小遣いマスタ --- */
+function openAllowanceEditor(index) {
+  const isNew = index < 0;
+  const row = isNew ? { name: '', amount: '' } : allowanceMaster[index];
+  openEditor(isNew ? 'おてつだいを追加' : 'おてつだいを編集',
+    textField('内容', 'ed-name', row.name, '例：ごみ捨て（1個）') +
+    textField('金額', 'ed-amount', row.amount, '例：20円　※マイナスは -10円'),
+    async function () {
+      const name = ev('ed-name'), amount = ev('ed-amount');
+      if (!name) return editorError('内容を入れてください');
+      if (!amount) return editorError('金額を入れてください');
+      if (allowanceMaster.some(function (m, i) { return m.name === name && i !== index; })) {
+        return editorError('同じ内容がすでにあります');
+      }
+      const rows = allowanceMaster.map(function (m) { return [m.name, m.amount]; });
+      if (isNew) rows.push([name, amount]); else rows[index] = [name, amount];
+      await saveMasterRows(FILE.allowanceMaster, rows);
+      await reloadAllowanceMaster();
+    });
+}
+async function deleteAllowanceRow(index) {
+  const row = allowanceMaster[index];
+  if (!confirm('「' + row.name + '」を削除します。\n※すでに記録済みのお小遣い実績は消えません。')) return;
+  const rows = allowanceMaster.filter(function (m, i) { return i !== index; })
+    .map(function (m) { return [m.name, m.amount]; });
+  await saveMasterRows(FILE.allowanceMaster, rows);
+  await reloadAllowanceMaster();
+}
+
+/* --- やることマスタ --- */
+const TASK_CATEGORIES = ['次の日のじゅんび', '勉強', '生活', 'まもること'];
+function taskMasterRows() {
+  return taskMaster.map(function (m) { return [m.name, m.category, m.time, m.checker, m.key]; });
+}
+/* 記録列は実績mdの列名になるので、重複しない値を作る。既存行では変更しない。 */
+const RESERVED_KEYS = ['date', '_na', '日付'];
+function makeTaskKey(name) {
+  let base = String(name).replace(/[|\-]/g, '').trim();
+  if (!base || RESERVED_KEYS.indexOf(base) !== -1) base = '項目';
+  let key = base, n = 2;
+  while (taskMaster.some(function (m) { return m.key === key; })) { key = base + n; n++; }
+  return key;
+}
+function openTaskEditor(index) {
+  const isNew = index < 0;
+  const row = isNew ? { name: '', category: TASK_CATEGORIES[0], time: '', checker: '子', key: '' } : taskMaster[index];
+  openEditor(isNew ? 'やる事を追加' : 'やる事を編集',
+    textField('やる事', 'ed-name', row.name, '例：連絡帳を出す') +
+    selectField('区分', 'ed-cat', row.category, TASK_CATEGORIES) +
+    textField('もくひょう時間', 'ed-time', row.time, '例：15:00　※なければ - ') +
+    selectField('確認する人', 'ed-checker', row.checker, ['子', '親']) +
+    (isNew ? '' : '<div class="field"><span class="lbl">記録列（変更できません）</span>' +
+      '<div class="readonly-val">' + esc(row.key) + '</div></div>'),
+    async function () {
+      const name = ev('ed-name');
+      if (!name) return editorError('やる事を入れてください');
+      if (taskMaster.some(function (m, i) { return m.name === name && i !== index; })) {
+        return editorError('同じ名前がすでにあります');
+      }
+      const cells = [name, ev('ed-cat'), ev('ed-time') || '-', ev('ed-checker'),
+        isNew ? makeTaskKey(name) : taskMaster[index].key];
+      const rows = taskMasterRows();
+      if (isNew) rows.push(cells); else rows[index] = cells;
+      await saveMasterRows(FILE.taskMaster, rows);
+      await reloadTaskMaster();
+      await loadTaskDayIntoChecklist();
+      statsLoadedYear = null;
+    });
+}
+async function deleteTaskRow(index) {
+  const row = taskMaster[index];
+  if (!confirm('「' + row.name + '」を削除します。\n※過去の実績は消えません（集計の対象から外れるだけです）。')) return;
+  const rows = taskMasterRows().filter(function (r, i) { return i !== index; });
+  await saveMasterRows(FILE.taskMaster, rows);
+  await reloadTaskMaster();
+  await loadTaskDayIntoChecklist();
+  statsLoadedYear = null;
 }
 
 /* ---------- がんばり表 ---------- */
@@ -1355,9 +1730,81 @@ function renderCalendarForMonth(data, month) {
       else if (res.type === 'triangle') mark = '<span class="mark-triangle">△</span>';
       else mark = '<span class="mark-cross">×</span>';
     }
-    html += '<div class="cal-cell"><span class="cal-date">' + d + '</span>' + mark + '</div>';
+    // 記録がある日だけ、タップして内訳を開ける
+    html += res
+      ? '<button type="button" class="cal-cell tappable" data-day="' + d + '" onclick="showDayDetail(' + month + ',' + d + ')">' +
+        '<span class="cal-date">' + d + '</span>' + mark + '</button>'
+      : '<div class="cal-cell"><span class="cal-date">' + d + '</span></div>';
   }
   document.getElementById('stats-calendar').innerHTML = html;
+  closeDayDetail();
+  document.getElementById('stats-tap-hint').hidden = !Object.keys(monthData.calendar).length;
+}
+
+/* カレンダーの日をタップ → その日の内訳（やる事ごとの結果） */
+const SCORE_LABEL = {
+  circle: { mark: '〇', text: 'ぜんぶ できた', cls: 'mark-circle' },
+  triangle: { mark: '△', text: 'ぜんぶ できたけど 要注意あり', cls: 'mark-triangle' },
+  cross: { mark: '×', text: 'できていない項目あり', cls: 'mark-cross' }
+};
+function closeDayDetail() {
+  const el = document.getElementById('stats-day-detail');
+  el.hidden = true;
+  el.innerHTML = '';
+  document.querySelectorAll('#stats-calendar .cal-cell.picked').forEach(function (c) { c.classList.remove('picked'); });
+}
+function showDayDetail(month, day) {
+  const data = window.__statsData;
+  if (!data) return;
+  const monthData = data.months[month - 1];
+  const score = monthData.calendar[day];
+  const dayRow = monthData.dayRows[day];
+  if (!score || !dayRow) return;
+
+  document.querySelectorAll('#stats-calendar .cal-cell.picked').forEach(function (c) { c.classList.remove('picked'); });
+  const cell = document.querySelector('#stats-calendar .cal-cell[data-day="' + day + '"]');
+  if (cell) cell.classList.add('picked');
+
+  // その月の実績ファイルに列があり、かつその日が対象だった項目だけを、マスタの並び順で表示する
+  const na = dayRow._na || {};
+  const inFile = function (m) { return monthData.columns.indexOf(m.key) !== -1 && !na[m.key]; };
+  const childItems = taskMaster.filter(function (m) { return m.checker !== '親' && inFile(m); });
+  const parentItems = taskMaster.filter(function (m) { return m.checker === '親' && inFile(m); });
+  const lab = SCORE_LABEL[score.type];
+
+  let html = '<div class="dd-head">' +
+    '<span class="t"><span class="' + lab.cls + '">' + lab.mark + '</span> ' +
+    month + '月' + day + '日 ' + esc(lab.text) + '</span>' +
+    '<button type="button" class="link-btn" onclick="closeDayDetail()">とじる</button></div>';
+
+  const groups = [];
+  childItems.forEach(function (m) {
+    const cat = m.category || 'やること';
+    let g = groups.find(function (x) { return x.name === cat; });
+    if (!g) { g = { name: cat, items: [] }; groups.push(g); }
+    g.items.push(m);
+  });
+  groups.forEach(function (g) {
+    html += '<div class="dd-sec">' + (CAT_ICON[g.name] || '📋') + ' ' + esc(g.name) + '</div>';
+    html += g.items.map(function (m) {
+      const ok = dayRow[m.key] === true;
+      return '<div class="dd-item ' + (ok ? 'ok' : 'ng') + '"><span class="st">' + (ok ? '✓' : '×') + '</span>' +
+        esc(m.name) + '</div>';
+    }).join('');
+  });
+  if (parentItems.length) {
+    html += '<div class="dd-sec">🛡️ パパ・ママのチェック</div>';
+    html += parentItems.map(function (m) {
+      const bad = dayRow[m.key] === true;   // 親項目は✅＝守れなかった
+      return '<div class="dd-item ' + (bad ? 'warn' : 'ok') + '"><span class="st">' + (bad ? '⚠' : '✓') + '</span>' +
+        esc(m.name) + (bad ? '' : '（まもれた）') + '</div>';
+    }).join('');
+  }
+
+  const el = document.getElementById('stats-day-detail');
+  el.innerHTML = html;
+  el.hidden = false;
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 </script>
 </body>
