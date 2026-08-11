@@ -892,22 +892,20 @@ function jDateLabel(dateStr) {
 function isMinus(amountStr) { return /^[-−]/.test(String(amountStr).trim()); }
 
 /* 日付欄：ふだんは「8月11日(火) きょう」と表示し、「変更」を押したときだけ入力欄を開く */
-function setupDateField(inputId, textId, toggleId, prefix) {
-  const input = document.getElementById(inputId);
-  const text = document.getElementById(textId);
-  const toggle = document.getElementById(toggleId);
-  function sync() {
-    const isToday = input.value === todayStr();
-    text.innerHTML = (prefix || '') + esc(jDateLabel(input.value)) +
-      (isToday ? '<span class="today-tag">きょう</span>' : '');
-  }
-  toggle.addEventListener('click', function () {
-    const isOpen = !input.hidden;
-    input.hidden = isOpen;
-    toggle.textContent = isOpen ? '変更' : '閉じる';
-  });
-  input.addEventListener('change', sync);
-  sync();
+const DATE_FIELDS = [
+  { input: 'a-date', text: 'a-date-text', toggle: 'a-date-toggle', prefix: '' },
+  { input: 't-date', text: 't-date-text', toggle: 't-date-toggle', prefix: '📅 ' }
+];
+function refreshDateText(f) {
+  const input = document.getElementById(f.input);
+  const isToday = input.value === todayStr();
+  document.getElementById(f.text).innerHTML = (f.prefix || '') + esc(jDateLabel(input.value)) +
+    (isToday ? '<span class="today-tag">きょう</span>' : '');
+}
+/* 開いている入力欄を閉じた状態に戻す（ログインし直したときの初期化用） */
+function collapseToggle(inputId, toggleId) {
+  document.getElementById(inputId).hidden = true;
+  document.getElementById(toggleId).textContent = '変更';
 }
 
 /* セグメント切替（登録者・支払い） */
@@ -946,16 +944,23 @@ let allowanceMonthOverride = null;
 function currentAllowanceYm() { return allowanceMonthOverride || ymOf(document.getElementById('a-date').value); }
 
 /* ---------- 初期化 ---------- */
-async function initApp() {
-  const t = todayStr();
-  document.getElementById('allowance-month').value = ymOf(t);
-  document.getElementById('a-date').value = t;
-  document.getElementById('t-date').value = t;
-  document.getElementById('stats-year').value = t.slice(0, 4);
-  document.getElementById('stats-month-select').value = String(parseInt(t.slice(5, 7), 10));
+/* イベント登録は「一度だけ」。initAppはログインのたびに走るので、ここで登録すると
+   ログアウト→ログインを繰り返した回数だけリスナーが多重登録され、
+   ＋ボタンが1回のタップで複数回進むなどの不具合になる。 */
+let listenersBound = false;
+function bindEventsOnce() {
+  if (listenersBound) return;
+  listenersBound = true;
 
-  setupDateField('a-date', 'a-date-text', 'a-date-toggle', '');
-  setupDateField('t-date', 't-date-text', 't-date-toggle', '📅 ');
+  DATE_FIELDS.forEach(function (f) {
+    document.getElementById(f.toggle).addEventListener('click', function () {
+      const input = document.getElementById(f.input);
+      const isOpen = !input.hidden;
+      input.hidden = isOpen;
+      this.textContent = isOpen ? '変更' : '閉じる';
+    });
+    document.getElementById(f.input).addEventListener('change', function () { refreshDateText(f); });
+  });
 
   document.getElementById('a-date').addEventListener('change', function () {
     allowanceMonthOverride = null;
@@ -1004,9 +1009,32 @@ async function initApp() {
   });
   document.getElementById('a-count-minus').addEventListener('click', function () { stepCount(-1); });
   document.getElementById('a-count-plus').addEventListener('click', function () { stepCount(1); });
+}
+
+async function initApp() {
+  bindEventsOnce();
+
+  const t = todayStr();
+  document.getElementById('allowance-month').value = ymOf(t);
+  document.getElementById('a-date').value = t;
+  document.getElementById('t-date').value = t;
+  document.getElementById('stats-year').value = t.slice(0, 4);
+  document.getElementById('stats-month-select').value = String(parseInt(t.slice(5, 7), 10));
+
+  // 開きっぱなしの欄・前のアカウントの状態を初期状態に戻す
+  DATE_FIELDS.forEach(function (f) { collapseToggle(f.input, f.toggle); refreshDateText(f); });
+  collapseToggle('a-amount', 'a-amount-toggle');
+  document.getElementById('a-count').value = 1;
+  allowanceMonthOverride = null;
+  document.getElementById('allowance-month-picker').hidden = true;
+  document.getElementById('allowance-month-toggle').textContent = '他の月を見る';
+  document.getElementById('allowance-status').textContent = '';
+  document.getElementById('task-status').textContent = '';
+  statsLoadedYear = null;
 
   renderSeg('a-paid-seg', [{ value: 'true', label: '支払い済み' }, { value: 'false', label: '未払い' }], 'true',
     function (v) { document.getElementById('a-paid').value = v; });
+  document.getElementById('a-paid').value = 'true';
   setupPersonField();
 
   allowanceMaster = await getAllowanceMaster();
