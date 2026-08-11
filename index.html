@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>子供のタスク管理アプリ</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --bg: #fdf6ee;
+    --card: #ffffff;
+    --accent: #e08e45;
+    --green: #4caf7d;
+    --red: #e2685c;
+    --text: #3b332c;
+    --sub: #8a7f72;
+    --border: #ecdfcf;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: 40px;
+  }
+  header { padding: 20px 16px 12px; text-align: center; }
+  header h1 { margin: 0; font-size: 20px; }
+
+  /* --- サインイン画面 --- */
+  #signin-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+  }
+  #signin-screen p { color: var(--sub); font-size: 14px; margin-bottom: 20px; }
+  #app { display: none; }
+
+  .tabs { display: flex; gap: 8px; padding: 0 16px 12px; }
+  .tab {
+    flex: 1; text-align: center; padding: 10px 8px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--border); cursor: pointer;
+    font-size: 14px; font-weight: bold; color: var(--sub);
+  }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .page { display: none; padding: 0 16px; }
+  .page.active { display: block; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { margin: 0 0 10px; font-size: 15px; color: var(--accent); }
+  select, input {
+    font-size: 15px; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fff; color: var(--text); width: 100%;
+  }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .row label { width: 70px; font-size: 13px; color: var(--sub); flex-shrink: 0; }
+
+  button.primary {
+    width: 100%; padding: 12px; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 15px; font-weight: bold;
+    cursor: pointer; margin-top: 6px;
+  }
+  button.primary:active { opacity: 0.85; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: center; }
+  th { color: var(--sub); font-weight: normal; font-size: 12px; }
+
+  .totals { display: flex; justify-content: space-around; margin-top: 12px; }
+  .totals div { text-align: center; }
+  .totals .val { font-size: 18px; font-weight: bold; }
+  .paid { color: var(--green); }
+  .unpaid { color: var(--red); }
+
+  .amt { color: var(--accent); font-weight: bold; }
+
+  .taskday-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 4px; border-bottom: 1px solid var(--border);
+  }
+  .taskday-item .cat { font-size: 11px; color: var(--sub); margin-left: 6px; }
+  .check-btn {
+    width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--border);
+    background: #fff; font-size: 18px; cursor: pointer;
+  }
+  .check-btn.on { background: var(--green); border-color: var(--green); color: #fff; }
+
+  .month-table { overflow-x: auto; }
+  .loading { text-align: center; color: var(--sub); padding: 20px; font-size: 13px; }
+  .hint { font-size: 12px; color: var(--sub); margin-top: 4px; }
+  .g-btn {
+    padding: 10px 22px; border-radius: 8px; border: 1px solid var(--border);
+    background: #fff; font-size: 15px; cursor: pointer; font-weight: bold;
+  }
+  .signout { font-size: 12px; color: var(--sub); text-align: right; padding: 0 16px 8px; cursor: pointer; }
+
+  /* --- タスクのセクション分け／親チェック警告表示 --- */
+  .task-section-label { font-size: 13px; font-weight: bold; color: var(--sub); margin: 14px 0 6px; }
+  .task-section-label.warn-label { color: var(--red); }
+  .taskday-item .time-hint { font-size: 11px; color: var(--accent); margin-left: 6px; }
+  .check-btn.warn.on { background: var(--red); border-color: var(--red); color: #fff; }
+
+  /* --- 実績カレンダー --- */
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+  .cal-day-label { text-align: center; font-size: 11px; color: var(--sub); padding: 4px 0; }
+  .cal-cell {
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; aspect-ratio: 1/1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 14px; position: relative;
+  }
+  .cal-date { font-size: 10px; color: var(--sub); position: absolute; top: 2px; left: 4px; }
+  .mark-circle { color: var(--green); font-weight: bold; font-size: 18px; }
+  .mark-triangle { color: var(--accent); font-weight: bold; font-size: 18px; }
+  .mark-cross { color: var(--red); opacity: .5; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<header><h1>🏠 子供のタスク管理アプリ</h1></header>
+
+<!-- ===== サインイン画面 ===== -->
+<div id="signin-screen">
+  <p>Googleアカウントでログインすると、Family noteのファイルを読み書きできます。</p>
+  <button class="g-btn" id="signin-btn">Googleでログイン</button>
+  <p id="signin-error" style="color:var(--red); font-size:12px; margin-top:12px;"></p>
+</div>
+
+<!-- ===== アプリ本体 ===== -->
+<div id="app">
+  <div class="signout" id="signout-btn">ログアウト</div>
+  <div class="tabs">
+    <div class="tab active" data-page="allowance">💰 お小遣い</div>
+    <div class="tab" data-page="task">✅ 毎日のタスク</div>
+    <div class="tab" data-page="stats">📊 実績</div>
+  </div>
+
+  <!-- お小遣いページ -->
+  <div class="page active" id="page-allowance">
+    <div class="card">
+      <h2>対象月</h2>
+      <input type="month" id="allowance-month">
+    </div>
+
+    <div class="card">
+      <h2>新しく記録する</h2>
+      <div class="row"><label>日付</label><input type="date" id="a-date"></div>
+      <div class="row"><label>お手伝い</label><select id="a-content"></select></div>
+      <div class="row"><label>個数</label><input type="number" id="a-count" value="1" min="1"></div>
+      <div class="row"><label>金額</label><input type="number" id="a-amount"></div>
+      <div class="hint">↑「個数×単価」で自動計算されます（必要なら直接書き換え可）</div>
+      <div class="row"><label>登録者</label>
+        <select id="a-person"><option>ママ</option><option>パパ</option></select>
+      </div>
+      <div class="row"><label>支払い</label>
+        <select id="a-paid"><option value="true">支払い済み</option><option value="false">未払い</option></select>
+      </div>
+      <button class="primary" onclick="submitAllowance()">記録する</button>
+      <div class="hint" id="allowance-status"></div>
+    </div>
+
+    <div class="card">
+      <h2>今月の実績</h2>
+      <div id="allowance-table" class="loading">読み込み中…</div>
+      <div class="totals" id="allowance-totals"></div>
+    </div>
+
+    <div class="card">
+      <h2>お手伝い単価表（マスタ）</h2>
+      <div id="allowance-master" class="loading">読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- 子供のタスクページ -->
+  <div class="page" id="page-task">
+    <div class="card">
+      <h2>今日の記録</h2>
+      <div class="row"><label>日付</label><input type="date" id="t-date"></div>
+      <div id="task-checklist" class="loading">読み込み中…</div>
+      <button class="primary" onclick="submitTaskDay()">この内容で保存する</button>
+      <div class="hint" id="task-status"></div>
+    </div>
+
+    <div class="card">
+      <h2>今月の一覧</h2>
+      <input type="month" id="task-month" style="margin-bottom:10px;">
+      <div class="month-table" id="task-table"></div>
+    </div>
+  </div>
+
+  <!-- 実績ページ -->
+  <div class="page" id="page-stats">
+    <div class="card">
+      <h2>年間実績</h2>
+      <div class="row"><label>年</label><input type="number" id="stats-year" style="width:100px"></div>
+      <div id="stats-yearly-table" class="month-table"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <div class="card">
+      <h2 id="stats-month-label">月別カレンダー</h2>
+      <div class="row"><label>月</label>
+        <select id="stats-month-select">
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+          <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+      </div>
+      <div class="hint" id="stats-summary"></div>
+      <div class="calendar-grid" id="stats-calendar"></div>
+      <div class="hint" style="margin-top:10px;">〇：全部できて問題なし／△：全部できたが要注意あり／×：できていない項目あり</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   ここだけ、ご自身の環境に合わせて書き換えてください
+   ========================================================= */
+const CLIENT_ID = '957727324879-aiscs4232rgt32s50a3ljhm488sai51l.apps.googleusercontent.com'; // Google Cloud ConsoleのOAuthクライアントID
+
+/* Family note 内の固定ID（変更不要） */
+const FOLDER = {
+  allowanceRecords: '1wi8BEBvp4P86UbmyC7485-NxkhsZwk_z', // 02_お小遣い管理/実績
+  taskRecords: '1YohzS85I_jO1KL3Tu4tf3efoVLE_y-G8'        // 03_子供のタスク管理/実績
+};
+const FILE = {
+  allowanceMaster: '1BoWRxavtiMuKzJ-M2W4eVmOBBEAsBB5R', // 02_お小遣い管理/マスタ.md
+  taskMaster: '17rTy77jWGfpa7ysOMqa3fo2RM53khfSY'         // 03_子供のタスク管理/マスタ.md
+};
+const TASK_ITEMS = ['連絡帳', 'ランチョン', 'えんぴつ', '水筒', '宿題', 'くもん', '英語', '本読み', '引出し', 'お風呂', '時間', '言う事'];
+const SCOPE = 'https://www.googleapis.com/auth/drive';
+
+let accessToken = null;
+let tokenClient = null;
+let allowanceMaster = [];
+let taskMaster = [];
+
+/* ---------- Google OAuth ---------- */
+window.addEventListener('load', function () {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE,
+    callback: function (resp) {
+      if (resp.error) {
+        document.getElementById('signin-error').textContent = 'ログインに失敗しました: ' + resp.error;
+        return;
+      }
+      accessToken = resp.access_token;
+      document.getElementById('signin-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      initApp();
+    }
+  });
+  document.getElementById('signin-btn').addEventListener('click', function () {
+    tokenClient.requestAccessToken();
+  });
+  document.getElementById('signout-btn').addEventListener('click', function () {
+    if (accessToken) google.accounts.oauth2.revoke(accessToken, function () {});
+    accessToken = null;
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('signin-screen').style.display = 'flex';
+  });
+});
+
+/* ---------- Drive API ラッパー ---------- */
+async function driveFetch(url, options) {
+  options = options || {};
+  options.headers = Object.assign({ Authorization: 'Bearer ' + accessToken }, options.headers || {});
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error('Drive API error ' + res.status + ': ' + text);
+  }
+  return res;
+}
+
+async function readFile(fileId) {
+  const res = await driveFetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media');
+  return await res.text();
+}
+
+async function writeFile(fileId, content) {
+  await driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
+    body: content
+  });
+}
+
+async function findFileByName(folderId, name) {
+  const q = encodeURIComponent("'" + folderId + "' in parents and name = '" + name.replace(/'/g, "\\'") + "' and trashed = false");
+  const res = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)');
+  const data = await res.json();
+  return data.files && data.files.length ? data.files[0] : null;
+}
+
+async function createFile(folderId, name, content) {
+  const metadata = { name: name, parents: [folderId], mimeType: 'text/plain' };
+  const boundary = '-------314159265358979323846';
+  const body =
+    '--' + boundary + '\r\n' +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify(metadata) + '\r\n' +
+    '--' + boundary + '\r\n' +
+    'Content-Type: text/plain; charset=UTF-8\r\n\r\n' +
+    content + '\r\n' +
+    '--' + boundary + '--';
+
+  const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body: body
+  });
+  return await res.json();
+}
+
+async function findOrCreateMonthFile(folderId, prefix, ym, templateFn) {
+  const name = prefix + '_' + ym + '.md';
+  let file = await findFileByName(folderId, name);
+  if (!file) file = await createFile(folderId, name, templateFn(ym));
+  return file.id;
+}
+
+/* ---------- Markdownテーブル パーサ ---------- */
+function parseRow(line) {
+  const cells = line.split('|');
+  if (cells.length && cells[0].trim() === '') cells.shift();
+  if (cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+  return cells.map(function (s) { return s.trim(); });
+}
+function parseMarkdownTable(content) {
+  const lines = content.split('\n');
+  let start = -1;
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (lines[i].trim().indexOf('|') === 0 && lines[i + 1].indexOf('---') !== -1) { start = i; break; }
+  }
+  if (start === -1) return { headers: [], rows: [], startLine: -1, endLine: -1 };
+  const headers = parseRow(lines[start]);
+  let end = start + 2;
+  const rows = [];
+  while (end < lines.length && lines[end].trim().indexOf('|') === 0) { rows.push(parseRow(lines[end])); end++; }
+  return { headers: headers, rows: rows, startLine: start, endLine: end, lines: lines };
+}
+
+/* ---------- お小遣い ---------- */
+function allowanceTemplate(ym) {
+  return '---\ndate: ' + ym + '\ntags: [お小遣い, 実績]\n---\n\n# お小遣い実績 ' + ym + '\n\n' +
+    '| 日付 | 内容 | 個数 | 金額 | 登録者 | 支払い |\n|---|---|---|---|---|---|\n\n' +
+    '**月合計：0円**（支払済み：0円／未払い：0円）\n';
+}
+function computeAllowanceTotals(entries) {
+  let paid = 0, unpaid = 0;
+  entries.forEach(function (e) {
+    const amt = parseInt(String(e.amount).replace(/[^\-0-9]/g, ''), 10) || 0;
+    if (String(e.paid).indexOf('❌') !== -1 || String(e.paid).indexOf('未払い') !== -1) unpaid += amt; else paid += amt;
+  });
+  return { paid: paid, unpaid: unpaid, total: paid + unpaid };
+}
+async function getAllowanceMaster() {
+  const table = parseMarkdownTable(await readFile(FILE.allowanceMaster));
+  return table.rows.map(function (r) { return { name: r[0], amount: r[1] }; });
+}
+async function getAllowanceMonth(ym) {
+  const fileId = await findOrCreateMonthFile(FOLDER.allowanceRecords, 'お小遣い', ym, allowanceTemplate);
+  const table = parseMarkdownTable(await readFile(fileId));
+  const entries = table.rows.map(function (r) { return { date: r[0], content: r[1], count: r[2], amount: r[3], person: r[4], paid: r[5] }; });
+  return { fileId: fileId, entries: entries, totals: computeAllowanceTotals(entries) };
+}
+async function addAllowanceEntry(ym, entry) {
+  const fileId = await findOrCreateMonthFile(FOLDER.allowanceRecords, 'お小遣い', ym, allowanceTemplate);
+  const content = await readFile(fileId);
+  const table = parseMarkdownTable(content);
+  const paidMark = entry.paid ? '✅' : '❌ 未払い';
+  const newRow = '| ' + [entry.date, entry.content, entry.count, entry.amount + '円', entry.person, paidMark].join(' | ') + ' |';
+  const lines = table.lines.slice();
+  lines.splice(table.endLine, 0, newRow);
+
+  const newEntries = table.rows.map(function (r) { return { amount: r[3], paid: r[5] }; });
+  newEntries.push({ amount: entry.amount + '円', paid: paidMark });
+  const totals = computeAllowanceTotals(newEntries);
+
+  const newContent = lines.join('\n').replace(
+    /\*\*月合計：.*?\*\*（支払済み：.*?円／未払い：.*?円）/,
+    '**月合計：' + totals.total + '円**（支払済み：' + totals.paid + '円／未払い：' + totals.unpaid + '円）'
+  );
+  await writeFile(fileId, newContent);
+  return getAllowanceMonth(ym);
+}
+
+/* ---------- 子供のタスク ---------- */
+function taskTemplate(ym) {
+  const header = '| 日付 | ' + TASK_ITEMS.join(' | ') + ' |\n|---|' + TASK_ITEMS.map(function () { return '---'; }).join('|') + '|\n';
+  return '---\ndate: ' + ym + '\ntags: [子供のタスク管理, 実績]\n---\n\n# 子供のタスク実績 ' + ym + '\n\n' +
+    '凡例：✅=できた／❌=できなかった。「時間」「言う事」は✅＝守れなかった（要注意）を表す。\n\n' + header;
+}
+async function getTaskMaster() {
+  const table = parseMarkdownTable(await readFile(FILE.taskMaster));
+  return table.rows.map(function (r) { return { name: r[0], category: r[1], time: r[2], checker: r[3] }; });
+}
+async function getTaskMonth(ym) {
+  const fileId = await findOrCreateMonthFile(FOLDER.taskRecords, '子供タスク', ym, taskTemplate);
+  const table = parseMarkdownTable(await readFile(fileId));
+  const days = table.rows.map(function (r) {
+    const day = { date: r[0] };
+    TASK_ITEMS.forEach(function (name, i) { day[name] = r[i + 1] === '✅'; });
+    return day;
+  });
+  return { fileId: fileId, items: TASK_ITEMS, days: days };
+}
+async function setTaskDay(ym, dateStr, checks) {
+  const fileId = await findOrCreateMonthFile(FOLDER.taskRecords, '子供タスク', ym, taskTemplate);
+  const content = await readFile(fileId);
+  const table = parseMarkdownTable(content);
+  const newRowCells = [dateStr].concat(TASK_ITEMS.map(function (name) { return checks[name] ? '✅' : '❌'; }));
+  const newRow = '| ' + newRowCells.join(' | ') + ' |';
+  const lines = table.lines.slice();
+
+  let existingIndex = -1;
+  for (let i = 0; i < table.rows.length; i++) { if (table.rows[i][0] === dateStr) { existingIndex = i; break; } }
+  if (existingIndex !== -1) lines[table.startLine + 2 + existingIndex] = newRow;
+  else lines.splice(table.endLine, 0, newRow);
+
+  await writeFile(fileId, lines.join('\n'));
+  return getTaskMonth(ym);
+}
+
+/* 実績集計用：ファイルが無ければ作成せず空扱いにする（年間集計で空ファイルを量産しないため） */
+async function getTaskMonthReadOnly(ym) {
+  const file = await findFileByName(FOLDER.taskRecords, '子供タスク_' + ym + '.md');
+  if (!file) return [];
+  const table = parseMarkdownTable(await readFile(file.id));
+  return table.rows.map(function (r) {
+    const day = { date: r[0] };
+    TASK_ITEMS.forEach(function (name, i) { day[name] = r[i + 1] === '✅'; });
+    return day;
+  });
+}
+
+/* ---------- 実績カレンダー／スコアリング ---------- */
+function countWeekdays(year, month) {
+  let count = 0;
+  const days = new Date(year, month, 0).getDate();
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+function isParentItem(name) {
+  const found = taskMaster.find(function (m) { return m.name === name; });
+  return !!found && found.checker === '親';
+}
+function dayNumFromShort(dateStr) { return parseInt(String(dateStr).split('/')[1], 10); }
+function computeDayScore(day, childItems, parentItems) {
+  if (!childItems.length) return null;
+  const allChildDone = childItems.every(function (name) { return day[name] === true; });
+  if (!allChildDone) return { type: 'cross', score: 0 };
+  const parentBad = parentItems.some(function (name) { return day[name] === true; });
+  if (parentBad) return { type: 'triangle', score: 0.5 };
+  return { type: 'circle', score: 1.0 };
+}
+async function getYearlyTaskStats(year) {
+  const childItems = TASK_ITEMS.filter(function (name) { return !isParentItem(name); });
+  const parentItems = TASK_ITEMS.filter(isParentItem);
+  const yms = [];
+  for (let m = 1; m <= 12; m++) yms.push(String(year) + '-' + String(m).padStart(2, '0'));
+  const monthRows = await Promise.all(yms.map(getTaskMonthReadOnly));
+  const months = monthRows.map(function (rows, idx) {
+    const m = idx + 1;
+    const target = countWeekdays(year, m);
+    let result = 0;
+    const calendar = {};
+    rows.forEach(function (day) {
+      const score = computeDayScore(day, childItems, parentItems);
+      if (score) {
+        result += score.score;
+        calendar[dayNumFromShort(day.date)] = score;
+      }
+    });
+    return { month: m, target: target, result: result, rate: target > 0 ? Math.round(result / target * 100) : 0, calendar: calendar };
+  });
+  return { year: year, months: months };
+}
+
+/* ---------- UI ---------- */
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function ymOf(dateStr) { return dateStr.slice(0, 7); }
+function mdDate(dateStr) { return dateStr.replace(/-/g, '/'); }
+function shortDate(dateStr) { const p = dateStr.split('-'); return p[1] + '/' + p[2]; }
+
+document.querySelectorAll('.tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+    document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
+    tab.classList.add('active');
+    document.getElementById('page-' + tab.dataset.page).classList.add('active');
+    if (tab.dataset.page === 'stats') loadStatsIfNeeded();
+  });
+});
+
+async function initApp() {
+  const t = todayStr();
+  document.getElementById('allowance-month').value = ymOf(t);
+  document.getElementById('task-month').value = ymOf(t);
+  document.getElementById('a-date').value = t;
+  document.getElementById('t-date').value = t;
+  document.getElementById('stats-year').value = t.slice(0, 4);
+  document.getElementById('stats-month-select').value = String(parseInt(t.slice(5, 7), 10));
+
+  document.getElementById('allowance-month').addEventListener('change', loadAllowanceMonth);
+  document.getElementById('task-month').addEventListener('change', loadTaskMonth);
+  document.getElementById('t-date').addEventListener('change', loadTaskDayIntoChecklist);
+  document.getElementById('stats-year').addEventListener('change', function () { loadStats(parseInt(this.value, 10)); });
+  document.getElementById('stats-month-select').addEventListener('change', function () {
+    if (window.__statsData) renderCalendarForMonth(window.__statsData, parseInt(this.value, 10));
+  });
+  document.getElementById('a-content').addEventListener('change', updateAllowanceAmount);
+  document.getElementById('a-count').addEventListener('input', updateAllowanceAmount);
+
+  allowanceMaster = await getAllowanceMaster();
+  renderAllowanceMaster(allowanceMaster);
+  const sel = document.getElementById('a-content');
+  sel.innerHTML = allowanceMaster.map(function (m) { return '<option>' + m.name + '</option>'; }).join('');
+  updateAllowanceAmount();
+
+  taskMaster = await getTaskMaster();
+  await loadTaskDayIntoChecklist();
+  await loadAllowanceMonth();
+  await loadTaskMonth();
+}
+
+function updateAllowanceAmount() {
+  const contentSel = document.getElementById('a-content');
+  const found = allowanceMaster.find(function (m) { return m.name === contentSel.value; });
+  const unit = found ? (parseInt(found.amount, 10) || 0) : 0;
+  const count = parseInt(document.getElementById('a-count').value, 10) || 1;
+  document.getElementById('a-amount').value = unit * count;
+}
+
+function renderAllowanceMaster(list) {
+  document.getElementById('allowance-master').innerHTML = '<table>' + list.map(function (m) {
+    return '<tr><td style="text-align:left">' + m.name + '</td><td class="amt">' + m.amount + '</td></tr>';
+  }).join('') + '</table>';
+}
+
+async function loadAllowanceMonth() {
+  const ym = document.getElementById('allowance-month').value;
+  if (!ym) return;
+  document.getElementById('allowance-table').innerHTML = '<div class="loading">読み込み中…</div>';
+  renderAllowanceMonth(await getAllowanceMonth(ym));
+}
+function renderAllowanceMonth(data) {
+  let html = '<table><tr><th>日付</th><th>内容</th><th>金額</th><th>登録者</th><th>支払い</th></tr>';
+  data.entries.forEach(function (e) {
+    html += '<tr><td>' + e.date + '</td><td>' + e.content + '</td><td>' + e.amount + '</td><td>' + e.person + '</td><td>' + e.paid + '</td></tr>';
+  });
+  html += '</table>';
+  if (!data.entries.length) html = '<div class="hint">まだ記録がありません</div>';
+  document.getElementById('allowance-table').innerHTML = html;
+  document.getElementById('allowance-totals').innerHTML =
+    '<div><div class="val">' + data.totals.total + '円</div>合計</div>' +
+    '<div><div class="val paid">' + data.totals.paid + '円</div>支払済</div>' +
+    '<div><div class="val unpaid">' + data.totals.unpaid + '円</div>未払い</div>';
+}
+
+async function submitAllowance() {
+  const entry = {
+    date: mdDate(document.getElementById('a-date').value),
+    content: document.getElementById('a-content').value,
+    count: document.getElementById('a-count').value,
+    amount: document.getElementById('a-amount').value,
+    person: document.getElementById('a-person').value,
+    paid: document.getElementById('a-paid').value === 'true'
+  };
+  const ym = ymOf(document.getElementById('a-date').value);
+  const statusEl = document.getElementById('allowance-status');
+  statusEl.textContent = '保存中…';
+  try {
+    const data = await addAllowanceEntry(ym, entry);
+    statusEl.textContent = '✅ 保存しました（' + entry.date + ' ' + entry.content + '）';
+    document.getElementById('allowance-month').value = ym;
+    renderAllowanceMonth(data);
+  } catch (err) {
+    statusEl.textContent = '⚠️ 保存に失敗しました：' + err.message;
+  }
+}
+
+function taskItemRowHTML(item, dayData) {
+  const checked = !!dayData[item.name];
+  const isParent = item.checker === '親';
+  const cls = 'check-btn' + (checked ? ' on' : '') + (isParent ? ' warn' : '');
+  const icon = checked ? (isParent ? '⚠' : '✅') : '';
+  const timeHint = item.time ? '<span class="time-hint">🕒 ' + item.time + 'までに</span>' : '';
+  return '<div class="taskday-item">' +
+    '<div><b>' + item.name + '</b><span class="cat">' + (item.category || '') + '</span>' + timeHint + '</div>' +
+    '<button type="button" class="' + cls + '" data-item="' + item.name + '" data-warn="' + (isParent ? '1' : '0') + '" onclick="toggleCheck(this)">' + icon + '</button>' +
+    '</div>';
+}
+function renderTaskChecklist(dayData) {
+  const childItems = taskMaster.filter(function (m) { return m.checker !== '親'; });
+  const parentItems = taskMaster.filter(function (m) { return m.checker === '親'; });
+  let html = '';
+  if (childItems.length) {
+    html += '<div class="task-section-label">📋 今日やる事</div>';
+    html += childItems.map(function (item) { return taskItemRowHTML(item, dayData); }).join('');
+  }
+  if (parentItems.length) {
+    html += '<div class="task-section-label warn-label">🛡️ パパ・ママのチェック（⚠＝守れなかった・要注意）</div>';
+    html += parentItems.map(function (item) { return taskItemRowHTML(item, dayData); }).join('');
+  }
+  document.getElementById('task-checklist').innerHTML = html;
+}
+function toggleCheck(btn) {
+  btn.classList.toggle('on');
+  const isWarn = btn.dataset.warn === '1';
+  const checked = btn.classList.contains('on');
+  btn.textContent = checked ? (isWarn ? '⚠' : '✅') : '';
+}
+
+async function loadTaskDayIntoChecklist() {
+  const dateStr = document.getElementById('t-date').value;
+  const ym = ymOf(dateStr);
+  const short = shortDate(dateStr);
+  const data = await getTaskMonth(ym);
+  const dayData = data.days.find(function (d) { return d.date === short; }) || {};
+  renderTaskChecklist(dayData);
+}
+
+async function submitTaskDay() {
+  const dateStr = document.getElementById('t-date').value;
+  const ym = ymOf(dateStr);
+  const short = shortDate(dateStr);
+  const checks = {};
+  document.querySelectorAll('#task-checklist .check-btn').forEach(function (btn) {
+    checks[btn.dataset.item] = btn.classList.contains('on');
+  });
+  const statusEl = document.getElementById('task-status');
+  statusEl.textContent = '保存中…';
+  try {
+    await setTaskDay(ym, short, checks);
+    statusEl.textContent = '✅ ' + short + ' の記録を保存しました';
+    document.getElementById('task-month').value = ym;
+    await loadTaskMonth();
+  } catch (err) {
+    statusEl.textContent = '⚠️ 保存に失敗しました：' + err.message;
+  }
+}
+
+async function loadTaskMonth() {
+  const ym = document.getElementById('task-month').value;
+  if (!ym) return;
+  document.getElementById('task-table').innerHTML = '<div class="loading">読み込み中…</div>';
+  renderTaskMonth(await getTaskMonth(ym));
+}
+function renderTaskMonth(data) {
+  if (!data.days.length) { document.getElementById('task-table').innerHTML = '<div class="hint">まだ記録がありません</div>'; return; }
+  let html = '<table><tr><th>日付</th>' + data.items.map(function (i) { return '<th>' + i + '</th>'; }).join('') + '</tr>';
+  data.days.forEach(function (d) {
+    html += '<tr><td>' + d.date + '</td>' + data.items.map(function (i) { return '<td>' + (d[i] ? '✅' : '❌') + '</td>'; }).join('') + '</tr>';
+  });
+  html += '</table>';
+  document.getElementById('task-table').innerHTML = html;
+}
+
+/* ---------- 実績ページ ---------- */
+let statsLoadedYear = null;
+async function loadStatsIfNeeded() {
+  const year = parseInt(document.getElementById('stats-year').value, 10);
+  if (statsLoadedYear === year) return;
+  await loadStats(year);
+}
+async function loadStats(year) {
+  document.getElementById('stats-yearly-table').innerHTML = '<div class="loading">読み込み中…</div>';
+  document.getElementById('stats-calendar').innerHTML = '';
+  document.getElementById('stats-summary').textContent = '';
+  try {
+    const data = await getYearlyTaskStats(year);
+    statsLoadedYear = year;
+    window.__statsData = data;
+    renderYearlyTable(data);
+    renderCalendarForMonth(data, parseInt(document.getElementById('stats-month-select').value, 10));
+  } catch (err) {
+    statsLoadedYear = null;
+    document.getElementById('stats-yearly-table').innerHTML =
+      '<div class="hint">⚠️ 読み込みに失敗しました：' + err.message + '（トークン切れの場合は再ログインしてください）</div>';
+  }
+}
+function renderYearlyTable(data) {
+  const header = '<tr><th>月</th>' + data.months.map(function (m) { return '<th>' + m.month + '</th>'; }).join('') + '</tr>';
+  const targetRow = '<tr><th>目標</th>' + data.months.map(function (m) { return '<td>' + m.target + '</td>'; }).join('') + '</tr>';
+  const resultRow = '<tr><th>実績</th>' + data.months.map(function (m) { return '<td>' + m.result + '</td>'; }).join('') + '</tr>';
+  const rateRow = '<tr><th>％</th>' + data.months.map(function (m) { return '<td>' + m.rate + '%</td>'; }).join('') + '</tr>';
+  document.getElementById('stats-yearly-table').innerHTML =
+    '<div style="overflow-x:auto"><table>' + header + targetRow + resultRow + rateRow + '</table></div>';
+}
+function renderCalendarForMonth(data, month) {
+  const monthData = data.months[month - 1];
+  document.getElementById('stats-month-label').textContent = data.year + '年' + month + '月の実績';
+  document.getElementById('stats-summary').textContent =
+    monthData.result + ' / ' + monthData.target + '（' + monthData.rate + '%）';
+  let html = ['日', '月', '火', '水', '木', '金', '土'].map(function (d) { return '<div class="cal-day-label">' + d + '</div>'; }).join('');
+  const firstDay = new Date(data.year, month - 1, 1).getDay();
+  const daysInMonth = new Date(data.year, month, 0).getDate();
+  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const res = monthData.calendar[d];
+    let mark = '';
+    if (res) {
+      if (res.type === 'circle') mark = '<span class="mark-circle">〇</span>';
+      else if (res.type === 'triangle') mark = '<span class="mark-triangle">△</span>';
+      else mark = '<span class="mark-cross">×</span>';
+    }
+    html += '<div class="cal-cell"><span class="cal-date">' + d + '</span>' + mark + '</div>';
+  }
+  document.getElementById('stats-calendar').innerHTML = html;
+}
+</script>
+</body>
+</html>
