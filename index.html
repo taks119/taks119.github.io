@@ -359,6 +359,18 @@
     .modal-card { border-radius: 18px; }
   }
 
+  /* ログイン期限切れのお知らせバー */
+  .authbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-top));
+    background: var(--red); color: #fff; font-size: 13px; font-weight: 800;
+  }
+  .authbar button {
+    border: none; border-radius: 999px; background: #fff; color: var(--red);
+    font-size: 13px; font-weight: 800; padding: 7px 16px; min-height: 36px; cursor: pointer;
+  }
+
   .loading { text-align: center; color: var(--sub); padding: 22px 0; font-size: 13px; font-weight: 700; }
   .empty { text-align: center; color: var(--sub); padding: 22px 0; font-size: 13px; font-weight: 700; }
 
@@ -376,9 +388,16 @@
 <div id="signin-screen">
   <div class="logo">🏠</div>
   <h2>Sfamiアプリ</h2>
-  <p>Googleアカウントでログインすると、<br>おこづかいと やることを 記録できます。</p>
+  <p id="signin-note">Googleアカウントでログインすると、<br>おこづかいと やることを 記録できます。</p>
   <button class="g-btn" id="signin-btn">Googleでログイン</button>
+  <button type="button" class="link-btn" id="switch-account-btn" style="margin-top:16px;">別のアカウントでログイン</button>
   <p id="signin-error" style="color:var(--red); font-size:12px; margin-top:14px;"></p>
+</div>
+
+<!-- 使用中に期限が切れたとき用。画面はそのままで、その場で入り直せるようにする -->
+<div class="authbar" id="auth-banner" hidden>
+  <span>ログインの期限が切れました</span>
+  <button type="button" id="reauth-btn">入り直す</button>
 </div>
 
 <!-- ===== アプリ本体 ===== -->
@@ -712,38 +731,117 @@ function pickMotivation() {
   return MOTIVATIONS[new Date().getDate() % MOTIVATIONS.length];
 }
 
-/* ---------- Google OAuth ---------- */
-window.addEventListener('load', function () {
+/* ---------- Google OAuth ----------
+   ブラウザだけで完結する構成のため、Googleからは有効期限つき（約1時間）の
+   アクセストークンしか受け取れない。サーバーが無いので更新トークンは扱えず、
+   「ずっとログインしたまま」にはできない。できるのは次の2つ：
+     1. 受け取ったトークンを端末に保存し、期限内は再ログインなしで開けるようにする
+     2. 期限が切れても prompt:'' でアカウント選択・同意画面を飛ばし、1タップで入り直せるようにする
+   ------------------------------------------------------------------ */
+const TOKEN_STORE = 'sfami_token_v1';
+const TOKEN_MARGIN_MS = 2 * 60 * 1000; // 残り2分を切ったトークンは使わない
+
+function saveToken(token, expiresInSec) {
+  try {
+    localStorage.setItem(TOKEN_STORE, JSON.stringify({
+      t: token, exp: Date.now() + (parseInt(expiresInSec, 10) || 3600) * 1000
+    }));
+  } catch (e) { /* プライベートモード等で保存できなくても動作は続ける */ }
+}
+function loadStoredToken() {
+  try {
+    const o = JSON.parse(localStorage.getItem(TOKEN_STORE) || 'null');
+    if (!o || !o.t || Date.now() > o.exp - TOKEN_MARGIN_MS) return null;
+    return o.t;
+  } catch (e) { return null; }
+}
+function clearStoredToken() {
+  try { localStorage.removeItem(TOKEN_STORE); } catch (e) { /* 無視 */ }
+}
+function isAuthError(err) { return /Drive API error 401/.test(String(err && err.message)); }
+
+let reauthOnly = false;          // 「入り直す」からの再取得（画面は作り直さない）
+let forceAccountChooser = false; // ログアウト直後・アカウント切替のときだけ選択画面を出す
+
+function showSignin(message) {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('signin-screen').style.display = 'block';
+  document.getElementById('auth-banner').hidden = true;
+  if (message) document.getElementById('signin-note').textContent = message;
+}
+function showAuthBanner() { document.getElementById('auth-banner').hidden = false; }
+
+async function enterApp() {
+  document.getElementById('signin-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('auth-banner').hidden = true;
+  try {
+    await resolveCurrentUser();
+    applyRolePermissions();
+    await initApp();
+  } catch (err) {
+    if (isAuthError(err)) {
+      clearStoredToken();
+      accessToken = null;
+      showSignin('ログインの期限が切れました。もう一度ログインしてください。');
+      return;
+    }
+    document.getElementById('allowance-table').innerHTML =
+      '<div class="empty">⚠️ 読み込みに失敗しました：' + esc(err.message) + '</div>';
+  }
+}
+
+window.addEventListener('load', async function () {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPE,
+    prompt: '', // 一度同意していれば、2回目以降はアカウント選択も同意画面も出さない
     callback: async function (resp) {
       if (resp.error) {
         document.getElementById('signin-error').textContent = 'ログインに失敗しました: ' + resp.error;
         return;
       }
       accessToken = resp.access_token;
-      document.getElementById('signin-screen').style.display = 'none';
-      document.getElementById('app').style.display = 'block';
-      try {
-        await resolveCurrentUser();
-        applyRolePermissions();
-        await initApp();
-      } catch (err) {
-        document.getElementById('allowance-table').innerHTML =
-          '<div class="empty">⚠️ 読み込みに失敗しました：' + esc(err.message) + '</div>';
+      saveToken(resp.access_token, resp.expires_in);
+      forceAccountChooser = false;
+      document.getElementById('signin-error').textContent = '';
+      if (reauthOnly) {
+        // 使用中に期限が切れたケース。チェックの付け直しをさせないよう画面は作り直さない
+        reauthOnly = false;
+        document.getElementById('auth-banner').hidden = true;
+        return;
       }
+      await enterApp();
     }
   });
-  document.getElementById('signin-btn').addEventListener('click', function () {
-    tokenClient.requestAccessToken();
+
+  function requestToken(opts) {
+    tokenClient.requestAccessToken(opts || (forceAccountChooser ? { prompt: 'select_account' } : {}));
+  }
+
+  document.getElementById('signin-btn').addEventListener('click', function () { requestToken(); });
+  document.getElementById('switch-account-btn').addEventListener('click', function () {
+    clearStoredToken();
+    requestToken({ prompt: 'select_account' });
+  });
+  document.getElementById('reauth-btn').addEventListener('click', function () {
+    reauthOnly = true;
+    requestToken();
   });
   document.getElementById('signout-btn').addEventListener('click', function () {
     if (accessToken) google.accounts.oauth2.revoke(accessToken, function () {});
     accessToken = null;
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('signin-screen').style.display = 'block';
+    clearStoredToken();
+    forceAccountChooser = true; // 次は誰でログインするか選べるようにする
+    showSignin('Googleアカウントでログインすると、おこづかいと やることを 記録できます。');
   });
+
+  // 期限内のトークンが端末に残っていれば、ログイン画面を出さずにそのまま開く
+  const stored = loadStoredToken();
+  if (stored) {
+    accessToken = stored;
+    await enterApp();
+  }
 });
 
 /* ---------- Drive API ラッパー ---------- */
@@ -752,6 +850,12 @@ async function driveFetch(url, options) {
   options.headers = Object.assign({ Authorization: 'Bearer ' + accessToken }, options.headers || {});
   const res = await fetch(url, options);
   if (!res.ok) {
+    // 401＝トークンの期限切れ。保存済みトークンを捨てて、その場で入り直せるバーを出す
+    // （403は権限不足やレート制限でも返るため、ここでは扱わない）
+    if (res.status === 401) {
+      clearStoredToken();
+      showAuthBanner();
+    }
     const text = await res.text();
     throw new Error('Drive API error ' + res.status + ': ' + text);
   }
