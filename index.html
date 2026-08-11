@@ -144,7 +144,7 @@
 
 <!-- ===== アプリ本体 ===== -->
 <div id="app">
-  <div class="signout" id="signout-btn">ログアウト</div>
+  <div class="signout"><span id="current-user-label"></span> <span id="signout-btn" style="cursor:pointer;">ログアウト</span></div>
   <div class="tabs">
     <div class="tab active" data-page="allowance">💰 お小遣い</div>
     <div class="tab" data-page="task">✅ 毎日のタスク</div>
@@ -153,7 +153,7 @@
 
   <!-- お小遣いページ -->
   <div class="page active" id="page-allowance">
-    <div class="card">
+    <div class="card" id="allowance-record-card">
       <h2>記録する</h2>
       <div class="row"><label>日付</label><input type="date" id="a-date"></div>
       <div class="row"><label>お手伝い</label><select id="a-content"></select></div>
@@ -255,19 +255,52 @@ const FILE = {
   taskMaster: '17rTy77jWGfpa7ysOMqa3fo2RM53khfSY'         // 03_子供のタスク管理/マスタ.md
 };
 const TASK_ITEMS = ['連絡帳', 'ランチョン', 'えんぴつ', '水筒', '宿題', 'くもん', '英語', '本読み', '引出し', 'お風呂', '時間', '言う事'];
-const SCOPE = 'https://www.googleapis.com/auth/drive';
+const SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
 
 let accessToken = null;
 let tokenClient = null;
 let allowanceMaster = [];
 let taskMaster = [];
 
+/* ---------- 家族アカウント／役割 ---------- */
+const ROLE_CHILD = '子供';
+const ROLE_PARENT = '親';
+let currentUserEmail = null;
+let currentUserName = '';
+let currentUserRole = ROLE_CHILD; // 未登録アカウントは安全側に倒して子供扱い
+
+async function fetchUserEmail() {
+  const res = await driveFetch('https://www.googleapis.com/oauth2/v2/userinfo');
+  const data = await res.json();
+  return data.email || '';
+}
+async function loadFamilyMembers() {
+  const file = await findFileByNameAnywhere('family_members.md');
+  if (!file) return [];
+  const table = parseMarkdownTable(await readFile(file.id));
+  return table.rows.map(function (r) { return { name: r[0], email: r[1], role: r[2] }; });
+}
+async function resolveCurrentUser() {
+  currentUserEmail = await fetchUserEmail();
+  const members = await loadFamilyMembers();
+  const match = members.find(function (m) { return m.email.toLowerCase() === currentUserEmail.toLowerCase(); });
+  currentUserRole = match ? match.role : ROLE_CHILD;
+  currentUserName = match ? match.name : currentUserEmail;
+}
+function applyRolePermissions() {
+  const isChild = currentUserRole === ROLE_CHILD;
+  const recordCard = document.getElementById('allowance-record-card');
+  if (recordCard) recordCard.style.display = isChild ? 'none' : '';
+  const label = document.getElementById('current-user-label');
+  if (label) label.textContent = currentUserName ? ('👤 ' + currentUserName) : '';
+}
+
 /* ---------- Google OAuth ---------- */
 window.addEventListener('load', function () {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPE,
-    callback: function (resp) {
+    callback: async function (resp) {
       if (resp.error) {
         document.getElementById('signin-error').textContent = 'ログインに失敗しました: ' + resp.error;
         return;
@@ -275,6 +308,8 @@ window.addEventListener('load', function () {
       accessToken = resp.access_token;
       document.getElementById('signin-screen').style.display = 'none';
       document.getElementById('app').style.display = 'block';
+      await resolveCurrentUser();
+      applyRolePermissions();
       initApp();
     }
   });
@@ -316,6 +351,15 @@ async function writeFile(fileId, content) {
 
 async function findFileByName(folderId, name) {
   const q = encodeURIComponent("'" + folderId + "' in parents and name = '" + name.replace(/'/g, "\\'") + "' and trashed = false");
+  const res = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)');
+  const data = await res.json();
+  return data.files && data.files.length ? data.files[0] : null;
+}
+
+/* フォルダIDを指定せず、ファイル名だけでDrive全体から検索する（90_Development配下のIDを
+   ハードコードしなくて済むようにするため。family_members.mdの検索に使用） */
+async function findFileByNameAnywhere(name) {
+  const q = encodeURIComponent("name = '" + name.replace(/'/g, "\\'") + "' and trashed = false");
   const res = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)');
   const data = await res.json();
   return data.files && data.files.length ? data.files[0] : null;
@@ -682,7 +726,7 @@ function taskItemRowHTML(item, dayData) {
 }
 function renderTaskChecklist(dayData) {
   const childItems = taskMaster.filter(function (m) { return m.checker !== '親'; });
-  const parentItems = taskMaster.filter(function (m) { return m.checker === '親'; });
+  const parentItems = currentUserRole === ROLE_CHILD ? [] : taskMaster.filter(function (m) { return m.checker === '親'; });
   let html = '';
   if (childItems.length) {
     html += '<div class="task-section-label">📋 今日やる事</div>';
