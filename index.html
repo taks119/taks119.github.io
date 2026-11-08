@@ -242,6 +242,11 @@
 
   .rec { display: flex; align-items: center; gap: 10px; padding: 12px 2px; border-bottom: 1px solid var(--line-2); }
   .rec:last-child { border-bottom: none; }
+  .rec.editable { cursor: pointer; border-radius: 8px; }
+  .rec.editable:active { background: var(--line-2); }
+  .edit-hint { font-size: 12px; color: var(--sub); margin: 4px 2px 10px; }
+  .field .ro { font-size: 14px; font-weight: 700; padding: 6px 0; }
+  .link-btn.danger { color: var(--red); margin-top: 6px; }
   .rec .d { flex-shrink: 0; width: 42px; font-size: 12px; font-weight: 800; color: var(--sub); }
   .rec .c { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; }
   .rec .c small { display: block; font-size: 11px; font-weight: 700; color: var(--sub); margin-top: 1px; }
@@ -534,6 +539,7 @@
           <input type="month" id="allowance-month">
         </div>
         <div id="allowance-table"><div class="loading">読み込み中…</div></div>
+        <div class="edit-hint" id="allowance-edit-hint" hidden>✏️ 記録を押すと、個数の修正や削除ができます（今月の分だけ）</div>
         <div class="totals" id="allowance-totals"></div>
       </div>
     </div>
@@ -763,7 +769,11 @@ async function api(action, params) {
 /* 旧コードと同じ名前の関数を、GAS呼び出しで置き換える（画面側のコードはそのまま使える）
    fileId の代わりに「キー」（例：'task-master'、'task:2026-11'）が行き来する */
 async function readFile(key) { return (await api('read', { key: key })).content; }
-async function writeFile(key, content) { await api('write', { key: key, content: content }); }
+async function readFileMeta(key) { const r = await api('read', { key: key }); return { content: r.content, modified: r.modified }; }
+// baseModified を渡すと、読んだあとに誰かが書き換えていた場合はGAS側で保存を断る（code: 'conflict'）
+async function writeFile(key, content, baseModified) {
+  await api('write', { key: key, content: content, baseModified: baseModified || '' });
+}
 async function findFileByName(kind, name) {
   const m = String(name).match(/_(\d{4}-\d{2})\.md$/);
   if (!m) return null;
@@ -919,27 +929,60 @@ async function getAllowanceMonth(ym) {
   const fileId = await findOrCreateMonthFile(FOLDER.allowanceRecords, 'お小遣い', ym, allowanceTemplate);
   const table = parseMarkdownTable(await readFile(fileId));
   const entries = table.rows.map(function (r) { return { date: r[0], content: r[1], count: r[2], amount: r[3], person: r[4], paid: r[5] }; });
-  return { fileId: fileId, entries: entries, totals: computeAllowanceTotals(entries) };
+  return { ym: ym, fileId: fileId, entries: entries, totals: computeAllowanceTotals(entries) };
 }
-async function addAllowanceEntry(ym, entry) {
+
+/* 月度ファイルの明細行を書き換える共通処理。
+   読んだ時点の更新日時を付けて保存し、その間に誰かが書き換えていたら保存しない（上書き防止）。
+   mutate(rowLines, rows) は明細行の配列を書き換える。 */
+async function updateAllowanceRows(ym, mutate) {
   const fileId = await findOrCreateMonthFile(FOLDER.allowanceRecords, 'お小遣い', ym, allowanceTemplate);
-  const content = await readFile(fileId);
-  const table = parseMarkdownTable(content);
-  const paidMark = entry.paid ? '✅' : '❌ 未払い';
-  const newRow = '| ' + [entry.date, entry.content, entry.count, entry.amount + '円', entry.person, paidMark].join(' | ') + ' |';
+  const meta = await readFileMeta(fileId);
+  const table = parseMarkdownTable(meta.content);
+  if (table.startLine === -1) throw new Error('記録の表が見つかりませんでした');
+  const rowLines = table.lines.slice(table.startLine + 2, table.endLine);
+  mutate(rowLines, table.rows);
   const lines = table.lines.slice();
-  lines.splice(table.endLine, 0, newRow);
-
-  const newEntries = table.rows.map(function (r) { return { amount: r[3], paid: r[5] }; });
-  newEntries.push({ amount: entry.amount + '円', paid: paidMark });
-  const totals = computeAllowanceTotals(newEntries);
-
+  lines.splice(table.startLine + 2, table.endLine - (table.startLine + 2), ...rowLines);
+  const totals = computeAllowanceTotals(rowLines.map(function (l) { const c = parseRow(l); return { amount: c[3], paid: c[5] }; }));
   const newContent = lines.join('\n').replace(
     /\*\*月合計：.*?\*\*（支払済み：.*?円／未払い：.*?円）/,
     '**月合計：' + totals.total + '円**（支払済み：' + totals.paid + '円／未払い：' + totals.unpaid + '円）'
   );
-  await writeFile(fileId, newContent);
+  await writeFile(fileId, newContent, meta.modified);
   return getAllowanceMonth(ym);
+}
+function allowanceRowLine(cells) { return '| ' + cells.join(' | ') + ' |'; }
+
+async function addAllowanceEntry(ym, entry) {
+  const paidMark = entry.paid ? '✅' : '❌ 未払い';
+  const add = function (rowLines) {
+    rowLines.push(allowanceRowLine([entry.date, entry.content, entry.count, entry.amount + '円', entry.person, paidMark]));
+  };
+  try {
+    return await updateAllowanceRows(ym, add);
+  } catch (err) {
+    // 追記は読み直してやり直しても安全なので、同時保存とぶつかったら1回だけやり直す
+    if (err.code === 'conflict') return updateAllowanceRows(ym, add);
+    throw err;
+  }
+}
+
+/* 明細の修正・削除。画面に表示していた行（original）がファイル上で変わっていないことを確かめてから直す。
+   newCells が null なら削除。 */
+async function changeAllowanceEntry(ym, index, original, newCells) {
+  const same = function (cells) {
+    return ['date', 'content', 'count', 'amount', 'person', 'paid'].every(function (k, i) { return String(cells[i] || '') === String(original[k] || ''); });
+  };
+  return updateAllowanceRows(ym, function (rowLines, rows) {
+    let i = (rows[index] && same(rows[index])) ? index : rows.findIndex(same);
+    if (i === -1) {
+      const e = new Error('この記録は、ほかの人が先に直したようです。画面を読み直してから、もう一度試してください');
+      e.code = 'conflict';
+      throw e;
+    }
+    if (newCells) rowLines[i] = allowanceRowLine(newCells); else rowLines.splice(i, 1);
+  });
 }
 
 /* ---------- 子供のタスク ---------- */
@@ -1410,14 +1453,21 @@ async function loadAllowanceMonth() {
       '<div class="empty">⚠️ 読み込みに失敗しました：' + esc(err.message) + '</div>';
   }
 }
+let currentAllowanceData = null;
+function canEditAllowance(data) {
+  return currentUserRole === ROLE_PARENT && data && data.ym === ymOf(todayStr());
+}
 function renderAllowanceMonth(data) {
+  currentAllowanceData = data;
+  const editable = canEditAllowance(data);
   if (!data.entries.length) {
     document.getElementById('allowance-table').innerHTML = '<div class="empty">まだ記録がありません</div>';
   } else {
-    document.getElementById('allowance-table').innerHTML = data.entries.map(function (e) {
+    document.getElementById('allowance-table').innerHTML = data.entries.map(function (e, i) {
       const unpaid = String(e.paid).indexOf('❌') !== -1 || String(e.paid).indexOf('未払い') !== -1;
       const countLabel = (e.count && e.count !== '1') ? ' ×' + esc(e.count) : '';
-      return '<div class="rec">' +
+      return '<div class="rec' + (editable ? ' editable' : '') + '"' +
+        (editable ? ' role="button" tabindex="0" onclick="openAllowanceRecordEditor(' + i + ')"' : '') + '>' +
         '<span class="d">' + esc(String(e.date).replace(/^\d{4}\//, '')) + '</span>' +
         '<span class="c">' + esc(e.content) + countLabel + '<small>' + esc(e.person) + '</small></span>' +
         '<span class="a' + (isMinus(e.amount) ? ' minus' : '') + '">' + esc(e.amount) + '</span>' +
@@ -1425,6 +1475,8 @@ function renderAllowanceMonth(data) {
         '</div>';
     }).join('');
   }
+  const hint = document.getElementById('allowance-edit-hint');
+  if (hint) hint.hidden = !(editable && data.entries.length);
   document.getElementById('allowance-totals').innerHTML =
     '<div class="tile"><div class="v">' + data.totals.total + '円</div><div class="k">合計</div></div>' +
     '<div class="tile"><div class="v paid">' + data.totals.paid + '円</div><div class="k">もらった</div></div>' +
@@ -1654,6 +1706,60 @@ function selectField(label, id, value, options) {
     options.map(function (o) {
       return '<option' + (o === value ? ' selected' : '') + '>' + esc(o) + '</option>';
     }).join('') + '</select></div>';
+}
+
+/* --- お小遣いの明細（当月・親のみ） --- */
+function amountNumber(v) { return parseInt(String(v).replace(/[^\-0-9]/g, ''), 10); }
+function openAllowanceRecordEditor(index) {
+  const data = currentAllowanceData;
+  if (!canEditAllowance(data)) return;
+  const e = data.entries[index];
+  const oldCount = parseInt(e.count, 10) || 1;
+  const oldAmount = amountNumber(e.amount) || 0;
+  const unit = oldAmount / oldCount; // 1個あたりの金額（個数を変えたときに金額を計算し直す）
+  openEditor('記録を直す',
+    '<div class="field"><span class="lbl">内容</span><div class="ro">' + esc(e.date) + '　' + esc(e.content) + '（' + esc(e.person) + '）</div></div>' +
+    '<div class="field"><span class="lbl">個数</span><input type="number" id="ed-rec-count" min="1" step="1" inputmode="numeric" value="' + oldCount + '"></div>' +
+    '<div class="field"><span class="lbl">金額（円）</span><input type="text" id="ed-rec-amount" inputmode="numeric" value="' + oldAmount + '"></div>' +
+    '<button type="button" class="link-btn danger" id="ed-rec-delete">この記録を削除する</button>',
+    async function () {
+      const count = parseInt(ev('ed-rec-count'), 10);
+      const amount = amountNumber(ev('ed-rec-amount'));
+      if (!count || count < 1) return editorError('個数は1以上で入れてください');
+      if (isNaN(amount)) return editorError('金額を数字で入れてください');
+      if (count === oldCount && amount === oldAmount) return true; // 変更なし
+      const cells = [e.date, e.content, String(count), amount + '円', e.person, e.paid];
+      try {
+        renderAllowanceMonth(await changeAllowanceEntry(data.ym, index, e, cells));
+      } catch (err) {
+        if (err.code !== 'conflict') throw err;
+        loadAllowanceMonth();
+        return editorError(err.message);
+      }
+      showAllowanceStatus('✅ 直しました（' + e.date + ' ' + e.content + '）');
+    });
+  document.getElementById('ed-rec-count').addEventListener('input', function () {
+    const c = parseInt(this.value, 10);
+    if (c >= 1 && Number.isInteger(unit)) document.getElementById('ed-rec-amount').value = unit * c;
+  });
+  document.getElementById('ed-rec-delete').addEventListener('click', async function () {
+    if (!confirm('「' + e.date + ' ' + e.content + '」の記録を削除します。よろしいですか？')) return;
+    this.disabled = true;
+    try {
+      renderAllowanceMonth(await changeAllowanceEntry(data.ym, index, e, null));
+      closeEditor();
+      showAllowanceStatus('🗑 削除しました（' + e.date + ' ' + e.content + '）');
+    } catch (err) {
+      this.disabled = false;
+      editorError(err.code === 'conflict' ? err.message : '削除に失敗しました：' + err.message);
+      if (err.code === 'conflict') loadAllowanceMonth();
+    }
+  });
+}
+function showAllowanceStatus(msg) {
+  const el = document.getElementById('allowance-status');
+  el.className = 'status';
+  el.textContent = msg;
 }
 
 /* --- お小遣いマスタ --- */
