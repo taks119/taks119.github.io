@@ -243,6 +243,13 @@
   .rec { display: flex; align-items: center; gap: 10px; padding: 12px 2px; border-bottom: 1px solid var(--line-2); }
   .rec:last-child { border-bottom: none; }
   .rec.editable { cursor: pointer; border-radius: 8px; }
+  .rec.pending { opacity: .6; }
+  .badge.saving { background: var(--line-2); color: var(--sub); }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+    z-index: 60; max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 700;
+    background: #1f2937; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+  .toast.busy { background: #374151; }
+  .toast.ng { background: var(--red); }
   .rec.editable:active { background: var(--line-2); }
   .edit-hint { font-size: 12px; color: var(--sub); margin: 4px 2px 10px; }
   .field .ro { font-size: 14px; font-weight: 700; padding: 6px 0; }
@@ -419,6 +426,8 @@
   </div>
   <p id="signin-error" style="color:var(--red); font-size:12px; margin-top:14px;"></p>
 </div>
+
+<div id="toast" class="toast" hidden></div>
 
 <!-- 通信に失敗したとき用 -->
 <div class="authbar" id="auth-banner" hidden>
@@ -758,6 +767,7 @@ async function api(action, params) {
     throw new ApiError('network', 'つながりませんでした');
   }
   const data = await res.json();
+  if (perf && data.ms) perf.serverMs += data.ms;
   if (!data.ok) {
     if (data.code === 'bad_pass') {
       storeDel(STORE.pass);
@@ -790,14 +800,15 @@ function isKnownMissing(key) { const m = knownMissing[key]; delete knownMissing[
 /* ---------- かかった時間の計測（管理タブの下に表示） ---------- */
 let perf = null;
 let perfLog = [];
-function perfStart(label) { if (!perf) perf = { label: label, t0: performance.now(), calls: 0 }; }
+function perfStart(label) { if (!perf) perf = { label: label, t0: performance.now(), calls: 0, serverMs: 0 }; }
 function perfCancel() { perf = null; }
 function perfEnd() {
   if (!perf) return;
   const sec = ((performance.now() - perf.t0) / 1000).toFixed(1);
   const now = new Date();
   const hm = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
-  const msg = perf.label + '：' + sec + '秒（通信' + perf.calls + '回）';
+  const msg = perf.label + '：' + sec + '秒（通信' + perf.calls + '回' +
+    (perf.serverMs ? '、うちGASの中の処理 ' + (perf.serverMs / 1000).toFixed(1) + '秒' : '') + '）';
   console.log('[Sfami] ' + msg);
   perfLog.unshift(hm + '　' + msg);
   perfLog = perfLog.slice(0, 5);
@@ -1574,12 +1585,13 @@ function renderAllowanceMonth(data) {
     document.getElementById('allowance-table').innerHTML = data.entries.map(function (e, i) {
       const unpaid = String(e.paid).indexOf('❌') !== -1 || String(e.paid).indexOf('未払い') !== -1;
       const countLabel = (e.count && e.count !== '1') ? ' ×' + esc(e.count) : '';
-      return '<div class="rec' + (editable ? ' editable' : '') + '"' +
+      return '<div class="rec' + (editable ? ' editable' : '') + (e.pending ? ' pending' : '') + '"' +
         (editable ? ' role="button" tabindex="0" onclick="openAllowanceRecordEditor(' + i + ')"' : '') + '>' +
         '<span class="d">' + esc(String(e.date).replace(/^\d{4}\//, '')) + '</span>' +
         '<span class="c">' + esc(e.content) + countLabel + '<small>' + esc(e.person) + '</small></span>' +
         '<span class="a' + (isMinus(e.amount) ? ' minus' : '') + '">' + esc(e.amount) + '</span>' +
-        '<span class="badge ' + (unpaid ? 'unpaid">これから' : 'paid">もらった') + '</span>' +
+        (e.pending ? '<span class="badge saving">保存中</span>' :
+          '<span class="badge ' + (unpaid ? 'unpaid">これから' : 'paid">もらった') + '</span>') +
         '</div>';
     }).join('');
   }
@@ -1607,22 +1619,33 @@ async function submitAllowance() {
   const ym = ymOf(document.getElementById('a-date').value);
   const statusEl = document.getElementById('allowance-status');
   statusEl.className = 'status';
-  statusEl.textContent = '保存中…';
-  perfStart('お小遣いの記録');
-  try {
-    const data = await addAllowanceEntry(ym, entry);
-    statusEl.textContent = '✅ 保存しました（' + entry.date + ' ' + entry.content + '）';
-    allowanceMonthOverride = null;
-    document.getElementById('allowance-month').value = ym;
-    document.getElementById('allowance-month-picker').hidden = true;
-    document.getElementById('allowance-month-toggle').textContent = '他の月を見る';
-    document.getElementById('allowance-list-label').textContent = ymLabel(ym) + 'の記録';
-    renderAllowanceMonth(data);
-  } catch (err) {
-    statusEl.className = 'status ng';
-    statusEl.textContent = '⚠️ 保存に失敗しました：' + err.message;
+  statusEl.textContent = '';
+  allowanceMonthOverride = null;
+  document.getElementById('allowance-month').value = ym;
+  document.getElementById('allowance-month-picker').hidden = true;
+  document.getElementById('allowance-month-toggle').textContent = '他の月を見る';
+  document.getElementById('allowance-list-label').textContent = ymLabel(ym) + 'の記録';
+  // 画面には先に出す（その月を表示中のとき）。保存は裏で行う
+  if (currentAllowanceData && currentAllowanceData.ym === ym) {
+    renderAllowanceMonth(optimisticAllowance(currentAllowanceData, function (list) {
+      list.push({ date: entry.date, content: entry.content, count: entry.count, amount: entry.amount + '円',
+        person: entry.person, paid: entry.paid ? '✅' : '❌ 未払い', pending: true });
+    }));
   }
-  perfEnd();
+  toast('保存中…', 'busy');
+  enqueueSave(async function () {
+    perfStart('お小遣いの記録');
+    const data = await addAllowanceEntry(ym, entry);
+    perfEnd();
+    if (currentAllowanceData && currentAllowanceData.ym === ym || currentAllowanceYm() === ym) renderAllowanceMonth(data);
+    toast('✅ 保存しました（' + entry.date + ' ' + entry.content + '）');
+  }).catch(function (err) {
+    perfCancel();
+    toast('⚠️ 保存できませんでした：' + err.message, 'ng');
+    statusEl.className = 'status ng';
+    statusEl.textContent = '⚠️ 保存できませんでした：' + err.message;
+    loadAllowanceMonth();
+  });
 }
 
 /* ---------- やること ---------- */
@@ -1724,7 +1747,7 @@ async function submitTaskDay() {
 
   const statusEl = document.getElementById('task-status');
   statusEl.className = 'status';
-  statusEl.textContent = '保存中…';
+  statusEl.textContent = '保存中…（このまま ほかの画面を見ても だいじょうぶ）';
   perfStart('やることの保存');
   try {
     await setTaskDay(ym, short, checks);
@@ -1820,12 +1843,41 @@ function selectField(label, id, value, options) {
     }).join('') + '</select></div>';
 }
 
+/* --- 保存は裏で順番に行う（画面は先に変える） --- */
+let saveQueue = Promise.resolve();
+let pendingSaves = 0;
+function enqueueSave(fn) {
+  pendingSaves++;
+  const p = saveQueue.then(fn);
+  saveQueue = p.catch(function () {}).then(function () { pendingSaves--; });
+  return p;
+}
+let toastTimer = null;
+function toast(msg, kind) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  if (kind !== 'ng' && kind !== 'busy') toastTimer = setTimeout(function () { el.hidden = true; }, 2500);
+}
+window.addEventListener('beforeunload', function (e) {
+  if (pendingSaves > 0) { e.preventDefault(); e.returnValue = ''; } // 保存中に閉じようとしたら確認を出す
+});
+/* 画面の記録データを複製し、手元で変えたものを作る（合計も計算し直す） */
+function optimisticAllowance(data, change) {
+  const entries = data.entries.map(function (e) { return Object.assign({}, e); });
+  change(entries);
+  return Object.assign({}, data, { entries: entries, totals: computeAllowanceTotals(entries) });
+}
+
 /* --- お小遣いの明細（当月・親のみ） --- */
 function amountNumber(v) { return parseInt(String(v).replace(/[^\-0-9]/g, ''), 10); }
 function openAllowanceRecordEditor(index) {
   const data = currentAllowanceData;
   if (!canEditAllowance(data)) return;
   const e = data.entries[index];
+  if (e.pending) { toast('保存中です。少し待ってから直してください', 'busy'); return; }
   const oldCount = parseInt(e.count, 10) || 1;
   const oldAmount = amountNumber(e.amount) || 0;
   const unit = oldAmount / oldCount; // 1個あたりの金額（個数を変えたときに金額を計算し直す）
@@ -1841,17 +1893,12 @@ function openAllowanceRecordEditor(index) {
       if (isNaN(amount)) return editorError('金額を数字で入れてください');
       if (count === oldCount && amount === oldAmount) return true; // 変更なし
       const cells = [e.date, e.content, String(count), amount + '円', e.person, e.paid];
-      perfStart('記録の修正');
-      try {
-        renderAllowanceMonth(await changeAllowanceEntry(data.ym, index, e, cells));
-      } catch (err) {
-        perfCancel();
-        if (err.code !== 'conflict') throw err;
-        loadAllowanceMonth();
-        return editorError(err.message);
-      }
-      perfEnd();
-      showAllowanceStatus('✅ 直しました（' + e.date + ' ' + e.content + '）');
+      // 画面は先に変えて閉じる。保存は裏で行い、失敗したら知らせて読み直す
+      renderAllowanceMonth(optimisticAllowance(data, function (list) {
+        list[index] = Object.assign(list[index], { count: String(count), amount: amount + '円', pending: true });
+      }));
+      saveAllowanceChange('記録の修正', data.ym, index, e, cells, '直しました');
+      return true;
     });
   document.getElementById('ed-rec-count').addEventListener('input', function () {
     const c = parseInt(this.value, 10);
@@ -1859,19 +1906,23 @@ function openAllowanceRecordEditor(index) {
   });
   document.getElementById('ed-rec-delete').addEventListener('click', async function () {
     if (!confirm('「' + e.date + ' ' + e.content + '」の記録を削除します。よろしいですか？')) return;
-    this.disabled = true;
-    perfStart('記録の削除');
-    try {
-      renderAllowanceMonth(await changeAllowanceEntry(data.ym, index, e, null));
-      perfEnd();
-      closeEditor();
-      showAllowanceStatus('🗑 削除しました（' + e.date + ' ' + e.content + '）');
-    } catch (err) {
-      perfCancel();
-      this.disabled = false;
-      editorError(err.code === 'conflict' ? err.message : '削除に失敗しました：' + err.message);
-      if (err.code === 'conflict') loadAllowanceMonth();
-    }
+    closeEditor();
+    renderAllowanceMonth(optimisticAllowance(data, function (list) { list.splice(index, 1); }));
+    saveAllowanceChange('記録の削除', data.ym, index, e, null, '削除しました');
+  });
+}
+function saveAllowanceChange(label, ym, index, original, cells, doneWord) {
+  toast('保存中…', 'busy');
+  enqueueSave(async function () {
+    perfStart(label);
+    const fresh = await changeAllowanceEntry(ym, index, original, cells);
+    perfEnd();
+    if (currentAllowanceData && currentAllowanceData.ym === ym) renderAllowanceMonth(fresh);
+    toast('✅ ' + doneWord + '（' + original.date + ' ' + original.content + '）');
+  }).catch(function (err) {
+    perfCancel();
+    toast('⚠️ 保存できませんでした：' + err.message, 'ng');
+    loadAllowanceMonth(); // 画面をファイルの内容に戻す
   });
 }
 function showAllowanceStatus(msg) {
